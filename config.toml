@@ -1,0 +1,27 @@
+# The URL the site will be built for
+base_url = "https://binarycake.ca"
+
+title = "Binary Cake"
+description = "Sam Wilson's blog about his chaotic programming projects, interesting ideas, and other technological sundry."
+default_language = "en"
+
+# Whether to automatically compile all Sass files in the sass directory
+compile_sass = true
+
+# Whether to do syntax highlighting
+# Theme can be customised by setting the `highlight_theme` variable to a theme supported by Zola
+highlight_code = true
+
+generate_rss = true
+
+# Whether to build a search index to be used later on by a JavaScript library
+build_search_index = false
+
+theme = "sam"
+
+[extra]
+sam_menu = [
+    { text = "posts", link = "/posts" },
+    { text = "github", link = "https://github.com/samwilsn" },
+    { text = "twitter", link = "https://twitter.com/_samwilsn_" },
+]

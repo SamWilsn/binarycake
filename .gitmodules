@@ -1,0 +1,4 @@
+[submodule "themes/sam"]
+	path = themes/sam
+	url = https://github.com/janbaudisch/zola-sam.git
+	branch = master
