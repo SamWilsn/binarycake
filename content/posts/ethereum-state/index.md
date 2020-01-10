@@ -11,7 +11,7 @@ _This post was co-authored by [@adietrichs][adietrichs] and [@samwilsn][samwilsn
 
 ## Introduction
 
-Ethereum 2.0's statelessness means that transactions have to bring their own state. More precisely, for every transaction a **block producer (BP)** wants to include into a block, they also have to include all state accessed by that transaction, as well as the corresponding witnesses. Neither the **user** creating the transaction nor the BP are assumed to hold state. Thus, a new kind of actor is required, whose role it is to hold and provide such state. This actor is commonly known as a **state provider (SP)**.
+Ethereum 2.0's statelessness means that transactions have to bring their own state. More precisely, for every transaction a **block proposer (BP)** wants to include into a block, they also have to include all state accessed by that transaction, as well as the corresponding witnesses. Neither the **user** creating the transaction nor the BP are assumed to hold state. Thus, a new kind of actor is required, whose role it is to hold and provide such state. This actor is commonly known as a **state provider (SP)**.
 
 Regardless of how BPs and SPs exchange state, it is likely going to be necessary for users to fetch state before creating a transaction. Examples include fetching contract bytecode to estimate gas cost or checking an account balance. This means SPs will expose a pull-like interface for users. An optional incentive layer could be added with payments for state via payment channels, although it seems feasible to start without such a system and rely on SPs altruistically providing state to users (as is currently the case in Ethereum 1.0).
 
@@ -163,7 +163,7 @@ BPs have no way to predict the actual gas used by any bundle of combined transac
 
 #### State Access Restrictions
 
-No restrictions for the main transaction. The BP only reaches out to the SP when creating the block, ensuring the state returned is up to date. Even more importantly, by bundling the transactions and requesting state for the whole bundle at once, state is attached in the exact context these transactions are then included into the block. This ensures that the provided state is always sufficient. It constitutes one of the key differences to the Direct Pull Model, where state is attached _before_ the transactions are bundled, resulting in the restrictions of that model.
+No restrictions for the main transaction. The BP only reaches out to the SP when creating the block, ensuring the state returned is up to date. Even more importantly, by bundling the transactions and requesting state for the whole bundle at once, state is attached in the exact context these transactions are then included into the block. This ensures that the provided state is always sufficient. It constitutes one of the key differences to the Direct Push Model, where state is attached _before_ the transactions are bundled, resulting in the restrictions of that model.
 
 As the user would have to include state for signature verification and fee payment, this transaction part would technically have the same restrictions outlined in the Direct Push Model. However, those limitations would be insignificant in practice. As signature verification and fee payment also have predictable state access under Eth1, compatibility between Eth1 and Eth2 would not be impaired. Moreover, in case of a VHEE, the VHEE would be designed in such a way as to ensure predictable state access, making further restrictions unnecessary.
 
