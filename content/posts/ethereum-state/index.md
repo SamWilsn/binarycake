@@ -1,7 +1,6 @@
 +++
 title = "State Provider Models in Ethereum 2.0"
 date = 2020-01-09T17:58:00Z
-draft = true
 +++
 _This post was co-authored by [@adietrichs][adietrichs] and [@samwilsn][samwilsn], with significant input by [@villanuevawill][villanuevawill] and the Quilt team. Originally posted on [ethresear.ch](https://ethresear.ch/t/state-provider-models-in-ethereum-2-0/6750)._
 
