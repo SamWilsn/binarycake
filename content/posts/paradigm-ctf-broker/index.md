@@ -59,7 +59,7 @@ WETH9 public constant weth = WETH9(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 IUniswapV2Factory public constant factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
 ```
 
-What immediately sticks out is that we have an [`IUniswapV2Factory`][factory] deployed at [`0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f`][etherscan-factory]. That's the same address as Uniswap on mainnet, implying we're running on a fork of mainnet! That gives us a _ton_ of tools like flashloans, the rest of Uniswap, and pretty much anything else you can think of. Great. The `weth` address also matches the mainnet token, so we have twice the confirmation.
+What immediately sticks out is that we have an [`IUniswapV2Factory`][factory] deployed at [`0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f`][etherscan-factory]. That's the same address as Uniswap on mainnet, implying we're running on a fork of mainnet! That gives us a _ton_ of tools like flashloans, the rest of Uniswap, and pretty much anything else you can think of. Great. The `weth` address also matches the mainnet token, so we have twice the confirmation[^1].
 
 That's not all `Setup.sol` has to offer. We've got a mysterious `Token` contract, with an `airdrop` function:
 
@@ -316,6 +316,10 @@ So children, it turns out you don't need a fancy exploit, all you need is Remix,
 # Conclusion
 
 That's another one down! My next post will be on the BABYREV challenge, which was about 1% reverse engineering and 99% perseverance.
+
+## Footnotes
+
+[^1]: As it turns out, most (and likely all) of the eth challenges were forked off of mainnet.
 
 [prev]: @/posts/paradigm-ctf/index.md
 [setup]: ./Setup.sol
