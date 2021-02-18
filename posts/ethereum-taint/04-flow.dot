@@ -1,0 +1,18 @@
+digraph ControlFlow {
+    bgcolor="transparent";
+    color="white";
+    fontcolor="white";
+    node                [color="white", fontcolor="white"];
+    edge                [color="white", fontcolor="white"];
+
+    zero [color=purple, fontcolor=purple];
+    foo [color=red, fontcolor=red, style=bold];
+    cond [color=red, fontcolor=red];
+    "!!block_0" [color=red, fontcolor=red];
+    
+    zero -> cond;
+    foo -> cond [color=red];
+    cond -> "!!block_0" [color=red, style=dotted];
+    "!!block_0" -> zero [color=red];
+    "!!block_0" -> foo [color=red];
+}

