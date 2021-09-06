@@ -1,5 +1,5 @@
 language: minimal
-dist: bionic
+dist: focal
 
 before_script:
   # Download and unzip the zola executable
