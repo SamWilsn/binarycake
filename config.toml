@@ -19,6 +19,10 @@ build_search_index = false
 
 theme = "sam"
 
+[markdown]
+highlight_code = true
+extra_syntaxes = [ "./syntax" ]
+
 [extra]
 sam_menu = [
     { text = "posts", link = "/posts" },
