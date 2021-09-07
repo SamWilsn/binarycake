@@ -414,7 +414,7 @@ bytes constant private TRAILER = hex"0000000049454e44ae426082"; // IEND Chunk
 ```
 [_source_](https://github.com/SamWilsn/face.png/blob/71ce0f7ff40ed3c50a00708e7b70abef70829f2f/contracts/render.sol#L599)
 
-That basically an entire PNG rendered dynamically on-chain.
+That's basically an entire PNG rendered dynamically on-chain.
 
 We did take a couple shortcuts:
 
