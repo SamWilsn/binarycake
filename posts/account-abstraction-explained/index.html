@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    🅰️🅰️ EIP-2938 Account Abstraction Explained 🧵👟
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    🅰️🅰️ EIP-2938 Account Abstraction Explained 🧵👟
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Thu Sep 17, 2020
+
+        
+        
+            
+                &#183; 1766 words
+            
+        
+        
+            
+            
+                &#183; 9 min
+            
+        
+        
+        <hr/>
+    
+    <p><em>Originally posted on <a href="https://hackmd.io/@SamWilsn/ryhxoGp4D">hackmd.io</a>.</em></p>
+<h2 id="what-is-account-abstraction">What is Account Abstraction</h2>
+<p>As of the Muir Glacier hard-fork, out of Ethereum's two kinds of accounts—externally owned accounts (EOAs, like your MetaMask wallet) and smart contracts—only EOAs may pay gas fees for transactions. Lifting that restriction and allowing custom validity logic is, at an extremely high level, Account Abstraction (AA).</p>
+<p>In this article, we want to give a brief and understandable explanation of <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2938.md">EIP-2938</a>, our proposal to bring AA to Ethereum.</p>
+<h3 id="a-concrete-example">A Concrete Example</h3>
+<p>The best way to explore AA is to see what you can build with it! So without further ado, here's a 2-of-2 multisig wallet that pays for its own transactions:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span style="color:#65737e;">// SPDX-License-Identifier: MPL-2.0
+</span><span>
+</span><span style="color:#b48ead;">pragma solidity ^</span><span style="color:#d08770;">0.7.1</span><span>;
+</span><span style="color:#b48ead;">pragma experimental</span><span> ABIEncoderV2;      </span><span style="color:#65737e;">// Enables structs in the ABI.
+</span><span>
+</span><span>account </span><span style="color:#b48ead;">contract </span><span style="color:#ebcb8b;">TwoOfTwo </span><span>{            </span><span style="color:#65737e;">// Note the new `account` keyword!
+</span><span>                                       </span><span style="color:#65737e;">// This marks the contract as
+</span><span>                                       </span><span style="color:#65737e;">// accepting AA transactions, and
+</span><span>                                       </span><span style="color:#65737e;">// makes solidity emit a special
+</span><span>                                       </span><span style="color:#65737e;">// prelude. More on that later.
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">struct </span><span style="color:#8fa1b3;">Signature </span><span>{
+</span><span>        </span><span style="color:#d08770;">uint8 </span><span>v;
+</span><span>        </span><span style="color:#d08770;">bytes32 </span><span>r;
+</span><span>        </span><span style="color:#d08770;">bytes32 </span><span>s;
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#d08770;">address </span><span style="color:#b48ead;">public </span><span>owner0;            </span><span style="color:#65737e;">// Making calls from this account
+</span><span>    </span><span style="color:#d08770;">address </span><span style="color:#b48ead;">public </span><span>owner1;            </span><span style="color:#65737e;">// requires two signatures, making
+</span><span>                                      </span><span style="color:#65737e;">// this a 2-of-2 multisig.
+</span><span>    
+</span><span>    </span><span style="color:#8fa1b3;">constructor</span><span>(
+</span><span>        </span><span style="color:#d08770;">address </span><span>_owner0,
+</span><span>        </span><span style="color:#d08770;">address </span><span>_owner1
+</span><span>    ) </span><span style="color:#b48ead;">payable </span><span>{
+</span><span>        owner0 = _owner0;
+</span><span>        owner1 = _owner1;
+</span><span>    }
+</span><span>    
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">transfer</span><span>(                </span><span style="color:#65737e;">// Emulates a regular Ethereum
+</span><span>        </span><span style="color:#d08770;">uint256 </span><span>gasPrice,             </span><span style="color:#65737e;">// transaction, but with a new
+</span><span>        </span><span style="color:#d08770;">uint256 </span><span>gasLimit,             </span><span style="color:#65737e;">// validity requirement:
+</span><span>        </span><span style="color:#d08770;">address </span><span style="color:#b48ead;">payable</span><span> to,           </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#d08770;">uint256 </span><span>amount,               </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#d08770;">bytes </span><span style="color:#b48ead;">calldata</span><span> payload,       </span><span style="color:#65737e;">//
+</span><span>        Signature </span><span style="color:#b48ead;">calldata</span><span> sig0,      </span><span style="color:#65737e;">// Two signatures instead of one!
+</span><span>        Signature </span><span style="color:#b48ead;">calldata</span><span> sig1
+</span><span>    ) </span><span style="color:#b48ead;">external </span><span>{
+</span><span>        </span><span style="color:#d08770;">bytes32 </span><span>digest = </span><span style="color:#96b5b4;">keccak256</span><span>(   </span><span style="color:#65737e;">// The signature validation logic
+</span><span>            </span><span style="color:#96b5b4;">abi.encodePacked</span><span>(         </span><span style="color:#65737e;">// for AA contracts is implemented
+</span><span>                </span><span style="color:#b48ead;">this</span><span>,                 </span><span style="color:#65737e;">// in the contract itself. This
+</span><span>                gasPrice,             </span><span style="color:#65737e;">// gives contracts a ton of
+</span><span>                gasLimit,             </span><span style="color:#65737e;">// flexibility. You don&#39;t even need
+</span><span>                to,                   </span><span style="color:#65737e;">// to use ECDSA signatures at all!
+</span><span>                amount,
+</span><span>                tx.nonce,             </span><span style="color:#65737e;">// Newly exposed!
+</span><span>                payload
+</span><span>            )
+</span><span>        );
+</span><span>
+</span><span>        </span><span style="color:#d08770;">address </span><span>signer0 =             </span><span style="color:#65737e;">// If either signature is invalid
+</span><span>            </span><span style="color:#96b5b4;">recover</span><span>(digest, sig0);    </span><span style="color:#65737e;">// the contract reverts the
+</span><span>        </span><span style="color:#b48ead;">require</span><span>(owner0 == signer0);   </span><span style="color:#65737e;">// transaction.
+</span><span>        
+</span><span>        </span><span style="color:#d08770;">address </span><span>signer1 =             </span><span style="color:#65737e;">// Since the revert happens before
+</span><span>            </span><span style="color:#96b5b4;">recover</span><span>(digest, sig1)     </span><span style="color:#65737e;">// `paygas` is called, the entire
+</span><span>        </span><span style="color:#b48ead;">require</span><span>(owner1 == signer1);   </span><span style="color:#65737e;">// transaction is invalid, and
+</span><span>                                      </span><span style="color:#65737e;">// this contract&#39;s balance is not
+</span><span>                                      </span><span style="color:#65737e;">// reduced.
+</span><span>
+</span><span>        </span><span style="color:#96b5b4;">paygas</span><span>(gasPrice, gasLimit);   </span><span style="color:#65737e;">// Signals that the transaction is
+</span><span>                                      </span><span style="color:#65737e;">// valid, and the gas price and
+</span><span>                                      </span><span style="color:#65737e;">// limit the contract is willing to
+</span><span>                                      </span><span style="color:#65737e;">// pay. Also creates a checkpoint:
+</span><span>                                      </span><span style="color:#65737e;">// changes before `paygas` are not
+</span><span>                                      </span><span style="color:#65737e;">// reverted if execution fails past
+</span><span>                                      </span><span style="color:#65737e;">// this point.
+</span><span>        
+</span><span>        (</span><span style="color:#d08770;">bool </span><span>success,) =
+</span><span>            to.call{value</span><span style="color:#b48ead;">:</span><span> amount}(payload);
+</span><span>        </span><span style="color:#b48ead;">require</span><span>(success);
+</span><span>    }
+</span><span>    
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">recover</span><span>(
+</span><span>        </span><span style="color:#d08770;">bytes32 </span><span>digest,
+</span><span>        Signature </span><span style="color:#b48ead;">calldata</span><span> signature
+</span><span>    ) </span><span style="color:#b48ead;">private pure returns </span><span>(</span><span style="color:#d08770;">address</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">return </span><span style="color:#96b5b4;">ecrecover</span><span>(
+</span><span>            digest,
+</span><span>            signature.v,
+</span><span>            signature.r,
+</span><span>            signature.s
+</span><span>        );
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>This is a rough sketch of how AA support could look in solidity, based on our early prototypes (available in the <a href="https://github.com/quilt/account-abstraction-playground">playground</a>).</p>
+<h2 id="what-is-eip-2938">What is EIP-2938?</h2>
+<p><a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2938.md">EIP-2938</a> is a specification for one flavor of AA, designed to be fairly simple to implement while allowing new and more powerful features to be developed in the future.</p>
+<h3 id="consensus-changes">Consensus Changes</h3>
+<p>The EIP contains three consensus critical changes:</p>
+<ul>
+<li>Add a new <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2718.md">EIP-2718</a> transaction type with fields <code>[nonce, target, data]</code>, where <code>target</code> is the AA contract's address. Note the omission of <code>to</code>, <code>gas_price</code>, <code>gas_limit</code>, and signature fields. Transactions of this type set <code>tx.origin</code> to <code>0xffff...ff</code>; a special address known as the AA entry point.</li>
+<li>Add a <code>NONCE</code> opcode (<code>tx.nonce</code> in solidity) that pushes the transaction's nonce field.</li>
+<li>Add a <code>PAYGAS</code> opcode which:
+<ul>
+<li>Creates an irrevertible checkpoint, guaranteeing state changes before <code>PAYGAS</code> cannot be undone by subsequent code.</li>
+<li>Accepts a version argument, followed by a variable number of arguments. Initially the version is always <code>1</code>, but exists for future compatibility with, for example, <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1559.md">EIP-1559</a>.</li>
+<li>In this first version:
+<ul>
+<li>Accepts a gas price and gas limit, signaling the contract's willingness to pay for the transaction.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="other-changes">Other Changes</h3>
+<p>When the existing transaction pool logic is combined with AA's arbitrary transaction validity a new<sup class="footnote-reference"><a href="#1">1</a></sup> type of attack on the Ethereum network is possible: a single transaction included in a mined block can invalidate a large number of previously valid pending transactions. Under a sustained attack, nodes would waste significant computation validating, propagating, then discarding these transactions. The EIP introduces a number of transaction pool restrictions to mitigate this attack, bringing the risk to a level comparable to non-AA transactions.</p>
+<p>First, nodes will not accept AA transactions with nonces higher than the currently valid nonce. If multiple transactions arrive with the same nonce, only the highest paying transaction will be kept. When the currently valid nonce for an AA contract changes (i.e. upon receipt of a new block with a transaction for that contract), nodes will drop the pending transaction for that contract, if one exists.</p>
+<p>Second, the EIP proposes a standard bytecode prefix for AA contracts. For non-AA invocations (i.e. <code>msg.sender != 0xffff...ff</code>) the prefix emits a log of <code>msg.sender</code> and <code>msg.value</code>. For AA invocations, the prefix passes execution to the main contract. Nodes will drop any AA transactions targeting a contract which doesn't begin with this standard prefix. Over time, more prefixes can be added (without a hard fork) to allow further functionality.</p>
+<p>Finally, encountering any of the following conditions before <code>PAYGAS</code> will cause the node to immediately drop the transaction:</p>
+<ul>
+<li>An environment opcode (<code>BLOCKHASH</code>, <code>COINBASE</code>, ...);</li>
+<li>Retrieving the <code>BALANCE</code> of any account, including the target itself;</li>
+<li>An external call/create (except to precompiles);</li>
+<li>An external state access that reads code (<code>EXTCODEHASH</code>, ...);</li>
+<li>More than a fixed validation gas limit (currently 90,000) has been consumed.</li>
+</ul>
+<p>These restrictions ensure that the only state accessible to the validity logic is state internal to the AA contract, and that this state can only be modified by the contract itself. Therefore, a pending transaction to an AA contract may only be invalidated by a block containing another transaction targeting the same contract.</p>
+<p>Furthermore, these restrictions give nodes assurances regarding AA transaction validity similar to those that non-AA transactions already have. As these are not consensus changes, miners are free to include transactions in a block that break these rules.</p>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p>This isn't strictly a <em>novel</em> attack, but it is significantly more problematic with AA contracts. For a more in-depth discussion, see <a href="https://ethresear.ch/t/dos-vectors-in-account-abstraction-aa-or-validation-generalization-a-case-study-in-geth/7937">DoS Vectors in Account Abstraction (AA) or Validation Generalization, a Case Study in Geth</a>.</p>
+</div>
+<h2 id="what-isn-t-eip-2938">What isn't EIP-2938?</h2>
+<p>If you've been following AA over the last couple years, you might have some expectations. Sorry to disappoint, but here's some of what you <strong>won't</strong> be getting with EIP-2938:</p>
+<ul>
+<li>Nonce Abstraction: EIP-2938 transactions still require a sequential nonce<sup class="footnote-reference"><a href="#2">2</a></sup>, enforced by the protocol, to maintain transaction hash uniqueness.</li>
+<li>Generally Efficient Transaction Propagation: Nodes will only store and propagate the single highest paying EIP-2938 transaction per AA contract. This works fine for single-tenant applications like smart wallets, and can be extended to multi-tenant applications in the future.</li>
+<li>Calling into AA Contracts: Requires <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2970.md">EIP-2970</a> to prevent attacks that invalidate large numbers of pending transactions.</li>
+<li><code>DELEGATECALL</code>: Requires <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2937.md">EIP-2937</a> for the same reason.</li>
+<li>Meta-transactions: Setting <code>msg.sender</code> and/or <code>tx.origin</code> is way out of scope.</li>
+</ul>
+<div class="footnote-definition" id="2"><sup class="footnote-definition-label">2</sup>
+<p>Quilt has done some <a href="https://hackmd.io/@SamWilsn/B1c0ZdaGP">limited research</a> into how contracts can combine multiple transactions into one bundle transaction.</p>
+</div>
+<h2 id="an-eip-2938-transaction-from-metamask-to-etherscan">An EIP-2938 Transaction: From MetaMask to Etherscan</h2>
+<p>Using the same 2-of-2 multisig contract introduced earlier, this section walks through how an AA transaction is different than a traditional transaction.</p>
+<h3 id="transaction-creation">Transaction Creation</h3>
+<p>Most of structure of an AA transaction is up to the contract itself (besides the mandatory fields). To create a simple transfer transaction for our multisig, first we collect the function arguments:</p>
+<pre data-lang="json" style="background-color:#2b303b;color:#c0c5ce;" class="language-json "><code class="language-json" data-lang="json"><span>{
+</span><span>    &quot;</span><span style="color:#a3be8c;">gasPrice</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x2f00000000</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">gasLimit</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x17000</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">to</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x6e609f3bD483769223393s89cB6C2033DeCe5eFc</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">amount</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x01</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">payload</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x</span><span>&quot;
+</span><span>}
+</span></code></pre>
+<p>Then we compute the keccak hash and sign it with both owner keys to give the full calldata:</p>
+<pre data-lang="json" style="background-color:#2b303b;color:#c0c5ce;" class="language-json "><code class="language-json" data-lang="json"><span>{
+</span><span>    &quot;</span><span style="color:#a3be8c;">gasPrice</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x2f00000000</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">gasLimit</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x17000</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">to</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x6e609f3bG483769223393e89cB6C2033DeCe5eDc</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">amount</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x01</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">payload</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">sig0</span><span>&quot;: {
+</span><span>        &quot;</span><span style="color:#a3be8c;">v</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x1b</span><span>&quot;,
+</span><span>        &quot;</span><span style="color:#a3be8c;">r</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x2655d252e8bc596535342e1fde05851bz643eae7a4caa79df3af9aa5aaa5824b</span><span>&quot;,
+</span><span>        &quot;</span><span style="color:#a3be8c;">s</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0xd3e8946829h049c3cf12ab029cd7cd5ecfe8355b1108ee3aca9e7ca629b9f9f6</span><span>&quot;
+</span><span>    },
+</span><span>    &quot;</span><span style="color:#a3be8c;">sig1</span><span>&quot;: {
+</span><span>        &quot;</span><span style="color:#a3be8c;">v</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x1c</span><span>&quot;,
+</span><span>        &quot;</span><span style="color:#a3be8c;">r</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0xc76654967f753b2578aad6l7261f15f85a6d2f280b49ef14eb239729f657a00b</span><span>&quot;,
+</span><span>        &quot;</span><span style="color:#a3be8c;">s</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x8631226829cc9e10f7192cd5cac20dcdtc8d815f8edb7e9a79052251e4f2824e</span><span>&quot;
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Finally, the calldata is inserted into the transaction envelope (the mandatory fields mentioned above):</p>
+<pre data-lang="json" style="background-color:#2b303b;color:#c0c5ce;" class="language-json "><code class="language-json" data-lang="json"><span>{
+</span><span>    &quot;</span><span style="color:#a3be8c;">nonce</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x01</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">target</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">0x4DEc645e385Ab34d33919ca024dECFD0c4543G40</span><span>&quot;,
+</span><span>    &quot;</span><span style="color:#a3be8c;">data</span><span>&quot;: { </span><span style="background-color:#bf616a;color:#2b303b;">...</span><span> }
+</span><span>}
+</span></code></pre>
+<p>Note the difference in envelope fields from a traditional transaction; specifically:</p>
+<ul>
+<li>No gas price or limit,</li>
+<li>No value to send,</li>
+<li>No signature fields, and</li>
+<li><code>target</code> instead of <code>to</code>.</li>
+</ul>
+<p>Instead, for the multisig contract, these fields are conveyed in the calldata and handled by the contract itself! Other contracts could use entirely different fields.</p>
+<h3 id="transaction-propagation">Transaction Propagation</h3>
+<p>When a traditional transaction arrives at a node, it is checked for validity. The same is true for AA transactions, though the checks are different.</p>
+<p>When processing incoming traditional transactions, nodes check that:</p>
+<ul>
+<li>Their nonce matches the account's next nonce or is Close Enough™,</li>
+<li>The account balance is sufficient to cover their value plus maximum gas fees, and</li>
+<li>Their signature matches the account's address.</li>
+</ul>
+<p>When processing incoming AA transactions, however, nodes check that:</p>
+<ul>
+<li>Their nonce matches the contract's next nonce exactly,</li>
+<li>The contract's bytecode begins with a standard prefix,</li>
+<li>The validation logic calls <code>PAYGAS</code> before reaching the validation gas limit,</li>
+<li>No banned opcodes are called before <code>PAYGAS</code>, and</li>
+<li>The contract's balance is sufficient to cover the gas fees set by <code>PAYGAS</code>.</li>
+</ul>
+<h3 id="block-propagation">Block Propagation</h3>
+<p>When the block arrives containing the AA transaction, any other pending transactions for the same account are dropped. This is different from traditional transactions, which get revalidated and possibly broadcast upon receipt of a new block.</p>
+<h2 id="call-to-action">Call to Action</h2>
+<h3 id="feedback-questions">Feedback &amp; Questions</h3>
+<p>Time to celebrate! You made it through the explainer. You're not done yet though. <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2938.md">EIP-2938</a> is still rather short on feedback. If you have any questions or suggestions please <a href="https://ethereum-magicians.org/t/eip-2938-account-abstraction/4630">leave a comment</a>! You can also find us on the <a href="https://discord.gg/GU55yAW">Ethereum R&amp;D Discord</a> in the <code>#account-abstraction</code> channel.</p>
+<h3 id="you-re-a-dapp-developer">You're a dApp developer?</h3>
+<p>Are you a smart contract or dApp developer interested in AA? Drop by the <a href="https://discord.gg/GU55yAW">Ethereum R&amp;D Discord</a> (<code>#account-abstraction</code>), we'd love to hear about your use case!</p>
+<h3 id="you-re-a-core-dev">You're a core dev?</h3>
+<p>What implementation challenges stand in the way of this EIP? Are you afraid AA will collapse the network? <a href="https://ethresear.ch/t/dos-vectors-in-account-abstraction-aa-or-validation-generalization-a-case-study-in-geth/7937">We're pretty sure it won't</a>, but we'd be happy to talk about it!</p>
+<h3 id="you-want-to-try-aa">You want to try AA?</h3>
+<p>Quilt has built an <a href="https://github.com/quilt/account-abstraction-playground">AA playground</a> on top of Geth, but it's a little out of sync with the EIP. Let us know how you'd like to try it, and we can update it!</p>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>

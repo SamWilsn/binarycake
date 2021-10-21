@@ -1,0 +1,19 @@
+digraph tweedle {
+    bgcolor="transparent";
+    node                [color="white", fontcolor="white"];
+    edge                [color="white", fontcolor="white"];
+
+    value               [fontcolor=red, color=red, style=bold];
+    dum                 [fontcolor=red, color=red];
+    selector            [fontcolor=red, color=red];
+    twixt               [fontcolor=red, color=red]
+    
+    zero -> value
+    value -> dum        [color=red]
+    dee -> dum
+    dum -> selector     [color=red]
+    
+    selector -> twixt   [color=red, style=dotted]
+    rattle -> twixt
+    dee -> twixt
+}

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    BABYREV Challenge - Paradigm CTF (Part 3 of 3)
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    BABYREV Challenge - Paradigm CTF (Part 3 of 3)
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Wed Feb 17, 2021
+
+        
+        
+            
+                &#183; 2291 words
+            
+        
+        
+            
+            
+                &#183; 12 min
+            
+        
+        
+        <hr/>
+    
+    <style>
+pre {
+line-height: 1.3em !important;
+}
+</style>
+<h2 id="introduction">Introduction</h2>
+<p>In my two preceding posts, I give short summaries of the <a href="https://binarycake.ca/posts/paradigm-ctf/">BABYCRYPTO</a> and <a href="https://binarycake.ca/posts/paradigm-ctf-broker/">BROKER</a> challenges from Paradigm's recent Capture the Flag competition. If you'd like more details on the competition itself, or the format of the challenges, go and give my <a href="https://binarycake.ca/posts/paradigm-ctf/">BABYCRYPTO</a> post a read first.</p>
+<p>Today I'll be going over the BABYREV challenge which was, by far, the longest challenge we completed during the competition. I'd also like to dedicate this post to <a href="https://twitter.com/adietrichs">@adietrichs</a>' and my collective sanity, which unfortunately didn't survive the 10+ hours we spent on this puzzle.</p>
+<p>Disclaimer: unlike the rest of our team, <a href="https://twitter.com/adietrichs">@adietrichs</a> and I don't have a ton of experience auditing or reverse engineering Ethereum contracts; we're protocol researchers. The approach we take here is the most basic, brute-force approach to solving this problem, but hey, it worked!</p>
+<h2 id="challenges">Challenges</h2>
+<h3 id="babyrev">BABYREV</h3>
+<p>After a relatively successful exploit on BROKER, I joined <a href="https://twitter.com/adietrichs">@adietrichs</a> on BABYREV. Based on the name and description, it was pretty obvious we'd be dealing with a reverse engineering puzzle.</p>
+<p><img src="./babyrev.png" alt="If I don't verify my source code, then hackers can't exploit my contract, right?" /></p>
+<p>The contents of the archive:</p>
+<pre><font color="#3465A4"><b>.</b></font>
+└── <font color="#3465A4"><b>babyrev</b></font>
+    └── <font color="#3465A4"><b>public</b></font>
+        ├── <font color="#3465A4"><b>contracts</b></font>
+        │   └── Setup.sol
+        ├── <font color="#3465A4"><b>deploy</b></font>
+        │   ├── chal.py
+        │   ├── compiled.bin
+        │   └── requirements.txt
+        └── Dockerfile
+</pre>
+<p>What immediately stands out is that the only contract we have is <a href="./Setup.sol"><code>Setup.sol</code></a>, unlike BROKER which gave us the <code>Broker</code> contract. We do have <code>compiled.bin</code>, which is a JSON file with the output from the compiler:</p>
+<pre data-lang="json" style="background-color:#2b303b;color:#c0c5ce;" class="language-json "><code class="language-json" data-lang="json"><span>{
+</span><span>    &quot;</span><span style="color:#a3be8c;">contracts</span><span>&quot;:{
+</span><span>        &quot;</span><span style="color:#a3be8c;">/private//Challenge.sol:Challenge</span><span>&quot;:{
+</span><span>            &quot;</span><span style="color:#a3be8c;">bin</span><span>&quot;:&quot;</span><span style="color:#a3be8c;">...</span><span>&quot;
+</span><span>        },
+</span><span>        &quot;</span><span style="color:#a3be8c;">contracts/Setup.sol:ChallengeInterface</span><span>&quot;:{
+</span><span>            &quot;</span><span style="color:#a3be8c;">bin</span><span>&quot;:&quot;&quot;
+</span><span>        },
+</span><span>        &quot;</span><span style="color:#a3be8c;">contracts/Setup.sol:Setup</span><span>&quot;:{
+</span><span>            &quot;</span><span style="color:#a3be8c;">bin</span><span>&quot;:&quot;</span><span style="color:#a3be8c;">...</span><span>&quot;
+</span><span>        }
+</span><span>    },
+</span><span>    &quot;</span><span style="color:#a3be8c;">version</span><span>&quot;:&quot;</span><span style="color:#a3be8c;">0.4.24+commit.e67f0147.mod.Darwin.appleclang</span><span>&quot;
+</span><span>}
+</span></code></pre>
+<p>The rest of the archive is pretty similar to BROKER: <a href="./Setup.sol"><code>Setup.sol</code></a> checks the win condition, and there's a bunch of Docker magic that spins up a fork of mainnet for the challenge.</p>
+<h4 id="win-condition">Win Condition</h4>
+<p>From <a href="./Setup.sol"><code>Setup.sol</code></a>:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>function isSolved() public view returns (bool) {
+</span><span>    return challenge.solved();
+</span><span>}
+</span></code></pre>
+<p>Well that's <em>profoundly</em> useful. The win condition is part of the secret <code>Challenge</code> contract. I guess it's time to jump right into the EVM<sup class="footnote-reference"><a href="#1">1</a></sup> assembly...</p>
+<h4 id="aside-disassembly">Aside: Disassembly</h4>
+<p>The bytecode in <code>compiled.bin</code> is encoded in hexadecimal, and isn't particularly readable. Disassembly is the process of decoding the hexadecimal string into something slightly more understandable.</p>
+<p>The basic disassembly process looks something like this:</p>
+<ol>
+<li>Read the first byte from the assembled program: <code>80</code>.</li>
+<li>Look up what that byte means, and for <code>80</code> that would be <code>DUP1</code> (or duplicate the top item of the stack.)</li>
+<li>If the byte encoded a <code>PUSH</code> instruction, read the immediate argument (so for <code>PUSH1</code>, read one extra byte; two for <code>PUSH2</code>; and so on.)</li>
+<li>Repeat until the entire bytecode is disassembled.</li>
+</ol>
+<p>Following those steps, an input like <code>0x6080604052</code> would become:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>PUSH1 0x80
+</span><span>PUSH1 0x40
+</span><span>MSTORE
+</span></code></pre>
+<p>Thankfully this process is automated. We used <a href="https://ethervm.io/decompile">ethervm's decompiler</a>, which spits out an annotated disassembly (and a decompiled version too!)</p>
+<h4 id="further-aside-constructors">Further Aside: Constructors</h4>
+<p>Solidity is a wondrous beast that takes care of the complex process of deploying a contract. Unfortunately we aren't looking at Solidity, so here be dragons.</p>
+<p>The first bytes (roughly up to the second <code>6080</code>) of a compiled contract are actually the <em>constructor code</em>, or the bits of code Solidity generates to get your contract constructed and deployed on-chain. Constructors, also known as <em>initcode</em>, take care of assigning initial storage values, populating immutable variables, and finally copying the code to be deployed into memory.</p>
+<p>Since we aren't super interested in the constructor for this challenge, we snip it off before passing the bytecode to the disassembler.</p>
+<h4 id="challenge-preamble"><code>Challenge</code> Preamble</h4>
+<p>The first thing Solidity contracts do is ensure that the calldata is at least four bytes long:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>entrypoint:         // Okay, I lied.
+</span><span>    PUSH1 0x80      // Setting up the free memory pointer is the very first
+</span><span>    PUSH1 0x40      // thing. The pointer lives at address 0x40 and is
+</span><span>    MSTORE          // initially set to 0x80. Solidity uses the first few
+</span><span>                    // 256-bit words of memory as scratch space.
+</span><span>
+</span><span>    PUSH1 0x04      // Then we do check the calldata length.
+</span><span>    CALLDATASIZE
+</span><span>    LT
+</span><span>    PUSH2 0x0062
+</span><span>    JUMPI           // If the calldata is too short, revert (eventually.)
+</span><span>                    // Else, fall through into the function selector
+</span><span>                    // blocks.
+</span></code></pre>
+<p>The calldata must be at least four bytes long, at least in this contract, because the first four bytes are used as an identifier for the function to call. The selectors are calculated from the keccak256 hash of the function signature.</p>
+<p>This is the first function selector block from <code>Challenge</code>:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>selector_0adf939b:
+</span><span>    PUSH1 0x00
+</span><span>    CALLDATALOAD        // Push the 0-th word of calldata.
+</span><span>    PUSH29 0x0100000000000000000000000000000000000000000000000000000000
+</span><span>    SWAP1
+</span><span>    DIV
+</span><span>    PUSH4 0xffffffff
+</span><span>    AND                 // DIV+AND emulates (calldata[0] &gt;&gt; 224)
+</span><span>    DUP1
+</span><span>    PUSH4 0x0adf939b    // Push the function selector.
+</span><span>    EQ
+</span><span>    PUSH2 0x0067
+</span><span>    JUMPI               // Jump to 0x67 if the selector matches.
+</span></code></pre>
+<p>This structure is repeated for the four public functions in <code>Challenge</code>:</p>
+<table><thead><tr><th>Selector</th><th>Signature<sup class="footnote-reference"><a href="#2">2</a></sup></th></tr></thead><tbody>
+<tr><td><code>0x0adf939b</code></td><td>??</td></tr>
+<tr><td><code>0x39ac0e49</code></td><td>??</td></tr>
+<tr><td><code>0x799320bb</code></td><td><code>solved()</code></td></tr>
+<tr><td><code>0x799320bb</code></td><td><code>solve(uint256)</code></td></tr>
+</tbody></table>
+<p>We only succeeded in guessing one (<code>solve(uint256)</code>) of the three unknown selectors. Thankfully, we didn't need to call the others directly from Solidity. We can now expand <code>ChallengeInterface</code> with an additional function:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span style="color:#b48ead;">interface </span><span style="color:#ebcb8b;">ChallengeInterface </span><span>{
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">solved</span><span>() </span><span style="color:#b48ead;">public view returns </span><span>(</span><span style="color:#d08770;">bool</span><span>);
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">solve</span><span>(</span><span style="color:#d08770;">uint256</span><span>) </span><span style="color:#b48ead;">public</span><span>;
+</span><span>}
+</span></code></pre>
+<p>At last our goal becomes clear: figure out some input for <code>solve</code> that makes <code>solved</code> return <code>true</code>.</p>
+<h4 id="much-further-aside-tools-deadends">Much Further Aside: Tools &amp; Deadends</h4>
+<p>If you're somewhat familiar with reverse engineering, you might be wondering if we tried any tools while cracking this challenge. Well, we did, but unfortunately none of them were able to solve this puzzle. <sup class="footnote-reference"><a href="#3">3</a></sup></p>
+<p>Specifically we tried:</p>
+<ul>
+<li><a href="https://manticore.readthedocs.io/en/latest/verifier.html"><code>manticore-verifier</code></a> - timed out</li>
+<li><code>gen_exploit.py</code> from <a href="https://github.com/nescio007/teether">teether</a>, modified - out of memory</li>
+<li><a href="https://github.com/ConsenSys/mythril"><code>mythril</code></a> - no output specific to the challenge</li>
+</ul>
+<p>Our failure with these tools is not a sign that they aren't useful, but rather that <a href="https://twitter.com/adietrichs">@adietrichs</a> and I have very little experience with them. I'm sure that in the right hands, they're formidable allies.</p>
+<p>If you look carefully at the disassembly, you'll note two large constants in the code:</p>
+<ul>
+<li><code>0x311dfa5451963f33b16e63f0c62278c9b907e43d1961cdf9f590a0c3b351c04019cccb831403</code></li>
+<li><code>0x504354467b763332795f3533637532335f336e633279703731306e5f34313930323137686d7d</code></li>
+</ul>
+<p>If you look even carefully-er, you might even notice that the second constant is valid ASCII, and that it decodes to <code>PCTF{v32y_53cu23_3nc2yp710n_4190217hm}</code>. That constant, alone, is not enough to capture the flag. <sup class="footnote-reference"><a href="#4">4</a></sup></p>
+<h4 id="strategy">Strategy</h4>
+<p>Without tool support, and with little else to do, we decided to manually walk through the entire contract, annotating the stack along the way. For those in the know, this is basically primitive <a href="https://en.wikipedia.org/wiki/Symbolic_execution">symbolic execution</a>. Our eventual goal was to recover enough of the <code>solve</code> function to see exactly what path we'd need to hit. We settled on a very simple annotation format: <code>opcode [stack-after-opcode]</code>. The top (most recently pushed) of the stack would always be on the left.</p>
+<p>A small snippet of annotated assembly would look like this:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>PUSH1 0x10      [0x10]
+</span><span>PUSH1 0x59      [0x59, 0x10]
+</span><span>ADD             [0x69]
+</span><span>MLOAD           [M0]            // M0 := mload(0x69)
+</span></code></pre>
+<p>And so we began. We annotated, and we annotated some more. We annotated so much, we annotated galore. <em>Seriously, this took us hours.</em> You can see the final annotated assembly <a href="https://gist.github.com/SamWilsn/f850807af39bdddbb88bbe44c787e376">here</a>.</p>
+<h4 id="islands-of-interest">Islands of Interest</h4>
+<p>Although annotating the assembly was slow going, we did quickly identify some sections of code that were <em>interesting</em>, and from there, reversed the important bits.</p>
+<h5 id="comparison-subroutine">Comparison Subroutine</h5>
+<p>The most obviously interesting place, and the first place I started tracing, was the comparison subroutine that then stores a <code>true</code> into storage. The only <code>SSTORE</code> in the whole contract is at offset <code>0x1157</code>. If we wanted to solve the challenge, this is where we'd have to end up.</p>
+<p>In the interest of preserving <em>your</em> sanity, dear reader, I won't inline the entire disassembly of the comparison subroutine. Instead, here is some pseudo-code:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>function solve(uint256 C) private {
+</span><span>    bytes memory expected = </span><span style="color:#65737e;">/* ... */</span><span>;
+</span><span>    bytes memory actual = do_some_magic(C);
+</span><span>
+</span><span>    if (keccak256(actual) == keccak256(expected)) {
+</span><span>        storage[0x00] = (storage[0x00] &amp; ~0xFF) | 0x01;
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Essentially, the final parts of the <code>solve</code> function compared the output of <code>do_some_magic(C)</code> (where <code>C</code> is under our control) to some expected value. If they matched, set <code>storage[0x00]</code>, marking the puzzle as solved.</p>
+<h5 id="the-tabletm">The Table™</h5>
+<p>The comparison function may have been the most obviously interesting, but the most perplexing section was roughly between offsets <code>0x0396</code> and <code>0x0D93</code>. This blob of instructions was surprisingly regular. It consisted of 256 repetitions of this:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>PUSH1 0x63      // Changes every repetition
+</span><span>PUSH1 0xff
+</span><span>AND             [0x63, M_A0, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]
+</span><span>DUP2            [M_A0, 0x63, M_A0, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]
+</span><span>MSTORE          [M_A0, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]        // memory@M_A0 := 0x00..0063
+</span><span>PUSH1 0x20      [0x20, M_A0, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]
+</span><span>ADD             [M_A1, M_A0, 0x00, 0x60, M_Z0, C, 0x01e1, FSEL]
+</span></code></pre>
+<ul>
+<li><code>FSEL</code> was the function selector.</li>
+<li><code>0x01e1</code> was the eventual return address.</li>
+<li><code>C</code> was the <code>uint256</code> argument supplied to <code>solve</code>.</li>
+<li><code>M_A0</code> and <code>M_Z0</code> were pointers to the first sections of memory regions we called <code>A</code> and <code>Z</code>. <code>M_A1</code> was the next section. I know, so creative.</li>
+</ul>
+<p>It took us a fairly long while to reason out what this section of code does, but eventually it became clear that this section builds an array of 256 values (which we called The Table™) in memory. Roughly, the following Solidity translates to something like The Table™:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>uint8[256] memory values;
+</span><span>values[0] = 0x63;
+</span><span>values[1] = 0x7c;
+</span><span>values[3] = 0x77;
+</span><span>.
+</span><span>.
+</span><span>.
+</span><span>values[253] = 0x54;
+</span><span>values[254] = 0xbb;
+</span><span>values[255] = 0x16;
+</span></code></pre>
+<p>An array of 256 values is pretty suspicious. It could be a map for a substitution cipher. It could be a cleverly disguised constant that needs to be XOR'd with the input value. It was neither, but we'll come back to it later!</p>
+<h5 id="the-magic">The Magic</h5>
+<p>The <code>do_some_magic</code> subroutine above covers a lot of assembly, and was pretty much a giant black box. We slowly uncovered how it worked, piece by piece. The first major milestone was discovered Sunday morning, at around 03:45:</p>
+<p><img src="./for.png" alt="IT'S A FOR LOOP" /></p>
+<p>I was referring to the subroutine around <code>0x1169</code>. In pseudo-code:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>weird = C
+</span><span>
+</span><span>/* ... */
+</span><span>
+</span><span>for (j = 0; j &lt; 32 * 8; j += 8) {
+</span><span>    offset = (weird &gt;&gt; j) &amp;&amp; 0xff
+</span><span>    elem = a_arr[offset]
+</span><span>    new_weird |= elem &lt;&lt; j          // add elem byte to the left
+</span><span>}
+</span></code></pre>
+<ul>
+<li><code>C</code> is, again, the <code>uint256</code> from calldata.</li>
+<li><code>weird</code> <sup class="footnote-reference"><a href="#5">5</a></sup> is, uh, a weird number. It's used later.</li>
+<li><code>new_weird</code> is transformed from <code>weird</code>.</li>
+</ul>
+<p>And in more English-like (but equally indecipherable) terms, this inner loop took <code>weird</code> and:</p>
+<ol>
+<li>Looked up the <code>j / 8</code><sup>th</sup> byte in <code>weird</code> from The Table™,</li>
+<li>Prepended that byte on the left hand side of <code>weird</code>, and</li>
+<li>Stored it in <code>new_weird</code>.</li>
+</ol>
+<p>What kind of algorithm does something like this? <strong>A hash function</strong>.</p>
+<p>What kind of algorithm breaks automated tools? <strong>A hash function</strong>.</p>
+<p>What did this code end up being? <strong>A hash function</strong>.</p>
+<h4 id="how-to-decompile-a-hash-function">How to Decompile a Hash Function</h4>
+<p><img src="./owl.jpg" alt="How to draw an owl" /></p>
+<p>From this point onward it was basically just decompiling more blocks from the disassembly, and translating them into pseudo-code. Don't get me wrong, there was a ton of work, and several &quot;Aha!&quot; moments, but there's really not much more to write about. By early evening (for me, night for @adietrichs) on Sunday, we had reversed the whole <code>solve(uint256)</code> function, including <code>do_some_magic</code>:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span style="color:#65737e;">// The Table™
+</span><span>a_arr = hex&quot;637c777bf26b6fc53001672bfed7ab76ca82c97dfa5947f0add4a2af9ca472c0b7fd9326363ff7cc34a5e5f171d8311504c723c31896059a071280e2eb27b27509832c1a1b6e5aa0523bd6b329e32f8453d100ed20fcb15b6acbbe394a4c58cfd0efaafb434d338545f9027f503c9fa851a3408f929d38f5bcb6da2110fff3d2cd0c13ec5f974417c4a77e3d645d197360814fdc222a908846eeb814de5e0bdbe0323a0a4906245cc2d3ac629195e479e7c8376d8dd54ea96c56f4ea657aae08ba78252e1ca6b4c6e8dd741f4bbd8b8a703eb5664803f60e613557b986c11d9ee1f8981169d98e949b1e87e9ce5528df8ca1890dbfe6426841992d0fb054bb16&quot;
+</span><span>
+</span><span style="color:#65737e;">// Target String - PCTF{v32y_53cu23_3nc2yp710n_4190217hm}
+</span><span>t_str = hex&quot;504354467b763332795f3533637532335f336e633279703731306e5f34313930323137686d7d&quot;
+</span><span>
+</span><span style="color:#65737e;">// Weird String
+</span><span>b_str = hex&quot;311dfa5451963f33b16e63f0c62278c9b907e43d1961cdf9f590a0c3b351c04019cccb831403&quot;
+</span><span>
+</span><span>weird = C
+</span><span>
+</span><span>for (i = 0; i &lt; len(b_str); i++) {
+</span><span>    weird_byte = weird &amp;&amp; 0xff
+</span><span>    b_str[i] ^= weird_byte
+</span><span>
+</span><span>    new_weird = 0x00
+</span><span>    for (j = 0; j &lt; 32 * 8; j += 8) {
+</span><span>        offset = (weird &gt;&gt; j) &amp;&amp; 0xff
+</span><span>        elem = a_arr[offset]
+</span><span>        new_weird |= elem &lt;&lt; j          </span><span style="color:#65737e;">// add elem byte to the left
+</span><span>    }
+</span><span>    weird = (new_weird &amp;&amp; 0xff) &lt;&lt; 31 * 8 | new_weird &gt;&gt; 8
+</span><span>}
+</span><span>
+</span><span>target_hash = sha3(t_str)
+</span><span>our_hash = sha3(b_str)
+</span><span>
+</span><span>if (target_hash == our_hash) {
+</span><span>    </span><span style="color:#65737e;">// Win the thing!
+</span><span>    storage[0x00] = (storage[0x00] &amp; ~0xFF) | 0x01;
+</span><span>}
+</span></code></pre>
+<p>The key takeaway here is that each byte of <code>b_str</code> gets overwritten with itself xor'd with the least significant byte of <code>weird</code>.</p>
+<h4 id="computing-c-a-rope-of-sand">Computing <code>C</code>: A Rope of Sand</h4>
+<p>Now that we know <em>how</em> <code>C</code> is used, we need to find a concrete value for <code>C</code> that correctly decodes <code>b_str</code>. Python to the rescue!</p>
+<pre data-lang="python" style="background-color:#2b303b;color:#c0c5ce;" class="language-python "><code class="language-python" data-lang="python"><span style="color:#65737e;"># This is where I&#39;ll put the Python tool when I get it from @adietrichs
+</span></code></pre>
+<p>Because of the way this hash function is constructed, it is possible to isolate each byte of the input value, one at a time. If this were a real hash function (like SHA-3), there'd be mixing between the bytes, making this process practically impossible.</p>
+<p>Now that we know <code>C</code>, we can craft the attack transaction, and solve the challenge.</p>
+<h1 id="conclusion">Conclusion</h1>
+<p>This concludes my mini-series on Paradigm's CTF competition. Thanks for sticking it out, and I hope you enjoyed it.</p>
+<p>If you'd like to see some of our team's other solutions, check out:</p>
+<ul>
+<li><a href="https://smarx.com/posts/2021/02/writeup-of-paradigm-ctf-bank/">BANK</a> by <a href="https://twitter.com/smarx">@smarx</a></li>
+<li><a href="https://smarx.com/posts/2021/02/writeup-of-paradigm-ctf-vault/">VAULT</a> also by <a href="https://twitter.com/smarx">@smarx</a></li>
+<li>JOP <a href="https://www.twitch.tv/videos/907645638">Part 1</a> and <a href="https://www.twitch.tv/videos/906353891">Part 2</a> (solved after the competition) by <a href="https://twitter.com/adietrichs">@adietrichs</a></li>
+<li><a href="https://hackmd.io/@adietrichs/paradigm-ctf-2021">UPGRADE</a> by <a href="https://twitter.com/adietrichs">@adietrichs</a></li>
+</ul>
+<p>A huge thank you to Paradigm for putting this whole thing together. It was a blast!</p>
+<h2 id="footnotes">Footnotes</h2>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p><em>Ethereum Virtual Machine</em>, the abstract computer simulated by Ethereum, that Solidity targets.</p>
+</div>
+<div class="footnote-definition" id="2"><sup class="footnote-definition-label">2</sup>
+<p>It is infeasible to recover the function signature given the selector, but <a href="https://www.4byte.directory/">4byte.directory</a> provides a public database mapping selectors to known signatures.</p>
+</div>
+<div class="footnote-definition" id="3"><sup class="footnote-definition-label">3</sup>
+<p>Likely intentional on the puzzlesmith's part!</p>
+</div>
+<div class="footnote-definition" id="4"><sup class="footnote-definition-label">4</sup>
+<p>No matter how much you want it to be.</p>
+</div>
+<div class="footnote-definition" id="5"><sup class="footnote-definition-label">5</sup>
+<p><em>I</em> called this <code>ACC</code> (for accumulator), but <a href="https://twitter.com/adietrichs">@adietrichs</a>' <code>weird</code> won out in the end. What do you want? It's a weird number.</p>
+</div>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>

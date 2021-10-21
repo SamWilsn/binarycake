@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    Rendering a PNG on Ethereum: face.png
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    Rendering a PNG on Ethereum: face.png
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Mon Sep  6, 2021
+
+        
+        
+            
+                &#183; 2296 words
+            
+        
+        
+            
+            
+                &#183; 12 min
+            
+        
+        
+        <hr/>
+    
+    <style>
+pre {
+line-height: 1.3em !important;
+}
+</style>
+<p><img src="./banner.svg" alt="banner of face nfts" />
+How do you create a PNG image dynamically in Solidity? How do you make it into a
+non-fungible token? Why would you create such an abomination? Why are they
+blurry in safari?</p>
+<p>The answer to some of these questions below!</p>
+<hr />
+<p>at the time of writing, there are still ~40 left on
+<a href="https://facepng.art">facepng.art</a></p>
+<hr />
+<h2 id="motivation">Motivation</h2>
+<h3 id="why-a-png">Why a PNG?</h3>
+<blockquote class="twitter-tweet" data-dnt="true" data-theme="dark"><p lang="en" dir="ltr">Everyone is making NFTs that generate their artwork on chain using SVG, but nobody is making ones that generate PNGs onchain.</p>&mdash; nick.eth (@nicksdjohnson) <a href="https://twitter.com/nicksdjohnson/status/1431144024052690944?ref_src=twsrc%5Etfw">August 27, 2021</a></blockquote> 
+<p>This is the tweet, right here.</p>
+<p>I'm not sure if Nick knows it, but he <a href="https://xkcd.com/356/">nerd sniped</a> me out of my entire
+weekend.</p>
+<h3 id="why-an-nft">Why an NFT?</h3>
+<p>All my friends and colleagues were getting <a href="https://bots.moonshotcollective.space/">cool</a> <a href="https://www.larvalabs.com/cryptopunks">non-fungible</a>
+<a href="https://ethertulips.com/">tokens</a> (NFTs) and using them as profile pictures on Twitter and GitHub
+and I felt left out, but I <em>really</em> like my profile picture:</p>
+<p><img src="./o_0.png" alt="o_0" /></p>
+<p>I wanted to have my cake and eat it too: participating in the NFT hype, and not
+giving up my &quot;brand&quot;.</p>
+<p>Making a one-of-one collectible is pretty boring though, so this one is
+generative! Nothing too fancy, just choosing a couple properties and combining
+them, which is a good exercise for doing the encoding on-chain anyway.</p>
+<p>So I settled on a small run of procedurally generated character art faces, with
+all the metadata and image data stored and calculated on-chain. Because I suffer
+from chronic laziness, I picked out seven eyes and three noses, giving a total
+supply of 147 faces. Not exactly a huge collection, but that's half the fun of
+collectibles anyway. To keep things recognizable, each face is unique based on
+the characters (and ignores the colors.)</p>
+<h2 id="implementation">Implementation</h2>
+<h3 id="anatomy-of-a-png-image">Anatomy of a PNG Image</h3>
+<p>Portable Network Graphics (PNG) images are a mainstay of the internet. <code>libpng</code>
+maintains a <a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Contents.html">specification of the format</a> that goes into a lot more depth,
+and if you're extremely interested in the fine details, I'd recommend reading
+it. The following hack job is my attempt to cover the parts important to
+generating the <em>simplest</em> PNG image I could think of, but I'll try to link to
+the relevant portions of the specification as we go along.</p>
+<h4 id="file-signature">File Signature</h4>
+<p>The first eight bytes of the file identify the file as a PNG image<sup class="footnote-reference"><a href="#1">1</a></sup>:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>+----+----+----+----+----+----+----+----+---
+</span><span>| 89 | 50 | 4e | 47 | 0d | 0a | 1a | 0a |
+</span><span>+----+----+----+----+----+----+----+----+---
+</span></code></pre>
+<p>There's actually some really cool tricks in the signature to detect various
+forms of corruption and transmission errors. For our purposes, the signature is
+just a static array of eight bytes to copy.</p>
+<h4 id="chunks">Chunks!</h4>
+<p>After the signature the PNG file is divided into chunks.<sup class="footnote-reference"><a href="#2">2</a></sup> Each chunk has a
+four byte length, four byte type, some data, and a four byte <a href="https://en.wikipedia.org/wiki/Cyclic_redundancy_check">cyclic redundancy
+check</a> (CRC):</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>---+--+--+--+--+--+--+--+--+--===--+--+--+--+--+---
+</span><span>   | Length    | Type      | Data  | CRC       |
+</span><span>---+--+--+--+--+--+--+--+--+--===--+--+--+--+--+---
+</span></code></pre>
+<p>There are four chunks we need to pay attention to: <code>IHDR</code>, <code>PLTE</code>, <code>IDAT</code>, and
+<code>IEND</code>.</p>
+<h5 id="ihdr-chunk"><code>IHDR</code> Chunk</h5>
+<p>The <code>IHDR</code> chunk, which I assume means image header, immediately follows the
+signature and contains metadata about the image itself:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>---+--+--+--+--+--+--+--+--+---+---+---+---+---+---
+</span><span>   | Width     | Height    | D | C | Z | F | I |
+</span><span>---+--+--+--+--+--+--+--+--+---+---+---+---+---+---
+</span><span>
+</span><span>D: Bit Depth
+</span><span>C: Color Type
+</span><span>Z: Compression Method
+</span><span>F: Filter Method
+</span><span>I: Interlace Method
+</span></code></pre>
+<p><em>Width</em> and <em>height</em> are pretty self-explanatory, <em>bit depth</em> is the number of
+bits per sample (or palette index), color type determines how colors are
+represented in the image data, <em>compression method</em> is always zero (for
+DEFLATE<sup class="footnote-reference"><a href="#3">3</a></sup>), filter method chooses a transform to apply to the image data
+before compression, and the <em>interlace method</em> indicates how the data is ordered
+(so it can be rendered while being transferred.)</p>
+<p>For our purposes, filter<sup class="footnote-reference"><a href="#4">4</a></sup> and interlace<sup class="footnote-reference"><a href="#5">5</a></sup> will always be zero for the
+default filter and no interlacing respectively. Since the images I want to
+encode are fairly simple—basically pixel art—we can use the palette
+(<code>3</code>) color type with a bit depth of <code>1</code>.</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>Width = 48
+</span><span>Height = 48
+</span><span>Bit Depth = 1
+</span><span>Color Type = 3
+</span><span>Compression Method = 0
+</span><span>Filter Method = 0
+</span><span>Interlace Method = 0
+</span></code></pre>
+<p>With the chunk header and CRC, the <code>IHDR</code> chunk ends up as another static block
+of bytes:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>---++----+----+----+----++----+----+----+----++----+----+----+----++----+----+----+----++----++----++----++----++----++-------------------++---
+</span><span>   || Length            || Type              || Width             || Height            || D  || C  || Z  || F  || I  || CRC               ||
+</span><span>---++----+----+----+----++----+----+----+----++----+----+----+----++----+----+----+----++----++----++----++----++----++----+----+----+----++---
+</span><span>   || 00 | 00 | 00 | 0d || 49 | 48 | 44 | 52 || 00 | 00 | 00 | 30 || 00 | 00 | 00 | 30 || 01 || 03 || 00 || 00 || 00 || 6d | cc | 6b | c4 ||
+</span><span>---++----+----+----+----++----+----+----+----++----+----+----+----++----+----+----+----++----++----++----++----++----++----+----+----+----++---
+</span></code></pre>
+<h5 id="plte-chunk"><code>PLTE</code> Chunk</h5>
+<p>The <code>PLTE</code> chunk<sup class="footnote-reference"><a href="#6">6</a></sup> holds an array of colors which can be referenced by index
+in the image data. Interestingly, this chunk is our first bit of dynamic data
+that needs to be constructed at runtime.</p>
+<p>Inside the <code>PLTE</code> chunk's data, we have each color encoded as three values: red,
+green, and blue. In <code>face.png</code>, we have only a foreground and a background
+color, so the <code>PLTE</code> length will be six.</p>
+<p>Color is a generated attribute, so we can't just hard code the <code>PLTE</code> chunk, it
+has to be calculated on the fly.</p>
+<p>First the static portion:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>bytes constant private HEADER =
+</span><span>    hex&quot;89504e470d0a1a0a&quot;                                       </span><span style="color:#65737e;">// PNG Signature
+</span><span>    hex&quot;0000000d49484452000000300000003001030000006dcc6bc4&quot;     </span><span style="color:#65737e;">// IHDR Chunk
+</span><span>    hex&quot;00000006504c5445&quot;;                                      </span><span style="color:#65737e;">// PLTE Chunk (Partial)
+</span></code></pre>
+<p><a href="https://github.com/SamWilsn/face.png/blob/71ce0f7ff40ed3c50a00708e7b70abef70829f2f/contracts/render.sol#L589"><em>source</em></a></p>
+<p>Then we copy the colors, and compute the checksum:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>uint offset = 0;
+</span><span>
+</span><span style="color:#65737e;">// Copy the static portion of the header.
+</span><span>for (uint ii = 0; ii &lt; HEADER.length; ii++) {
+</span><span>    output[offset++] = HEADER[ii];
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">// Copy the background color.
+</span><span>for (uint ii = 0; ii &lt; bg.length; ii++) {
+</span><span>    output[offset++] = bg[ii];
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">// Copy the foreground color.
+</span><span>for (uint ii = 0; ii &lt; fg.length; ii++) {
+</span><span>    output[offset++] = fg[ii];
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">// Compute the palette&#39;s checksum.
+</span><span>output.crc32(HEADER.length - 4, offset);
+</span><span>offset += 4;
+</span></code></pre>
+<p><a href="https://github.com/SamWilsn/face.png/blob/71ce0f7ff40ed3c50a00708e7b70abef70829f2f/contracts/render.sol#L730"><em>source</em></a></p>
+<p>Finally, the checksum implementation itself:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span style="color:#b48ead;">library </span><span style="color:#ebcb8b;">Crc32 </span><span>{
+</span><span>    </span><span style="color:#d08770;">bytes </span><span style="color:#b48ead;">constant private </span><span>TABLE = hex</span><span style="color:#a3be8c;">&quot;[snip]&quot;</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">table</span><span>(</span><span style="color:#d08770;">uint </span><span>index) </span><span style="color:#b48ead;">private pure returns </span><span>(</span><span style="color:#d08770;">uint32</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">unchecked </span><span>{
+</span><span>            index *= </span><span style="color:#d08770;">4</span><span>;
+</span><span>
+</span><span>            </span><span style="color:#d08770;">uint32 </span><span>result =
+</span><span>                </span><span style="color:#d08770;">uint32</span><span>(</span><span style="color:#d08770;">uint8</span><span>(TABLE[index    ])) &lt;&lt; </span><span style="color:#d08770;">24</span><span>;
+</span><span>            result |= </span><span style="color:#d08770;">uint32</span><span>(</span><span style="color:#d08770;">uint8</span><span>(TABLE[index + </span><span style="color:#d08770;">1</span><span>])) &lt;&lt; </span><span style="color:#d08770;">16</span><span>;
+</span><span>            result |= </span><span style="color:#d08770;">uint32</span><span>(</span><span style="color:#d08770;">uint8</span><span>(TABLE[index + </span><span style="color:#d08770;">2</span><span>])) &lt;&lt; </span><span style="color:#d08770;">8</span><span>;
+</span><span>            result |= </span><span style="color:#d08770;">uint32</span><span>(</span><span style="color:#d08770;">uint8</span><span>(TABLE[index + </span><span style="color:#d08770;">3</span><span>]));
+</span><span>            </span><span style="color:#b48ead;">return</span><span> result;
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">crc32</span><span>(</span><span style="color:#d08770;">bytes </span><span style="color:#b48ead;">memory</span><span> self, </span><span style="color:#d08770;">uint </span><span>offset, </span><span style="color:#d08770;">uint </span><span>end) </span><span style="color:#b48ead;">internal pure </span><span>{
+</span><span>        </span><span style="color:#b48ead;">unchecked </span><span>{
+</span><span>            </span><span style="color:#d08770;">uint32 </span><span>crc = ~</span><span style="color:#d08770;">uint32</span><span>(</span><span style="color:#d08770;">0</span><span>);
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">for </span><span>(</span><span style="color:#d08770;">uint </span><span>ii = offset; ii &lt; end; ii++) {
+</span><span>                crc = (crc &gt;&gt; </span><span style="color:#d08770;">8</span><span>) ^ </span><span style="color:#96b5b4;">table</span><span>((crc &amp; </span><span style="color:#d08770;">0xff</span><span>) ^ </span><span style="color:#d08770;">uint8</span><span>(self[ii]));
+</span><span>            }
+</span><span>
+</span><span>            crc = ~crc;
+</span><span>
+</span><span>            self[end    ] = </span><span style="color:#d08770;">bytes1</span><span>(</span><span style="color:#d08770;">uint8</span><span>(crc &gt;&gt; 24));
+</span><span>            self[end + </span><span style="color:#d08770;">1</span><span>] = </span><span style="color:#d08770;">bytes1</span><span>(</span><span style="color:#d08770;">uint8</span><span>(crc &gt;&gt; 16));
+</span><span>            self[end + </span><span style="color:#d08770;">2</span><span>] = </span><span style="color:#d08770;">bytes1</span><span>(</span><span style="color:#d08770;">uint8</span><span>(crc &gt;&gt; 8));
+</span><span>            self[end + </span><span style="color:#d08770;">3</span><span>] = </span><span style="color:#d08770;">bytes1</span><span>(</span><span style="color:#d08770;">uint8</span><span>(crc));
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p><a href="https://github.com/SamWilsn/face.png/blob/71ce0f7ff40ed3c50a00708e7b70abef70829f2f/contracts/render.sol#L5"><em>source</em></a></p>
+<p>Length, identifier, bunch of colors, and a checksum. That's about it for the
+palette.</p>
+<h5 id="idat-chunk"><code>IDAT</code> Chunk</h5>
+<p>The <code>IDAT</code> (or image data) chunk<sup class="footnote-reference"><a href="#7">7</a></sup> is where the real magic happens. In a more
+traditional PNG image, the encoder does some fancy magic to figure out what
+filters<sup class="footnote-reference"><a href="#8">8</a></sup> to apply, then compresses the data, and writes it out.</p>
+<p>In our grossly simplified encoder we wrap the image data in a zlib stream
+without any compression:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>---++----++----++-===--++----+----+----+----++---
+</span><span>   || M  || F  || Data || Adler32           ||
+</span><span>---++----++----++-===--++----+----+----+----++---
+</span><span>   || 78 || 01 || ...  || ?? | ?? | ?? | ?? ||
+</span><span>---++----++----++-===--++----+----+----+----++---
+</span><span>
+</span><span>M: Compression method/flags code
+</span><span>F: Additional flags/check bits
+</span></code></pre>
+<p>The image data itself is 48 rows of 7 bytes. The first byte of each row is the
+filter mode, which is always zero for <code>face.png</code>. The remaining 6 bytes are the
+actual image data, which is divided into three chunks—the left eye, nose,
+and right eye. Each bit of the image data represents an index into the palette
+from the <code>PLTE</code> chunk, and here a zero is the background, and a one is the
+foreground.</p>
+<p>Each segment is encoded as a byte array constant in Solidity:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>bytes constant private EYES_CRY =
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0004&quot;
+</span><span>    hex&quot;0004&quot;
+</span><span>    hex&quot;0002&quot;
+</span><span>    hex&quot;0002&quot;
+</span><span>    hex&quot;0002&quot;
+</span><span>    hex&quot;0006&quot;
+</span><span>    hex&quot;3ffe&quot;
+</span><span>    hex&quot;7ffc&quot;
+</span><span>    hex&quot;0630&quot;
+</span><span>    hex&quot;1818&quot;
+</span><span>    hex&quot;108c&quot;
+</span><span>    hex&quot;31c6&quot;
+</span><span>    hex&quot;21c6&quot;
+</span><span>    hex&quot;6086&quot;
+</span><span>    hex&quot;6006&quot;
+</span><span>    hex&quot;6006&quot;
+</span><span>    hex&quot;310e&quot;
+</span><span>    hex&quot;3ffc&quot;
+</span><span>    hex&quot;1e78&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0100&quot;
+</span><span>    hex&quot;0180&quot;
+</span><span>    hex&quot;0380&quot;
+</span><span>    hex&quot;0380&quot;
+</span><span>    hex&quot;0100&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;
+</span><span>    hex&quot;0000&quot;;
+</span></code></pre>
+<p><a href="https://github.com/SamWilsn/face.png/blob/71ce0f7ff40ed3c50a00708e7b70abef70829f2f/contracts/render.sol#L384"><em>source</em></a></p>
+<p><code>EYES_CRY</code> would render into something like:</p>
+<p><img src="./cry.png" alt="ಥ" /></p>
+<p>Concatenate together each row of each template image, and you have your image
+data!</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>function render(bytes memory output, uint offset, uint8 leftEyeIndex, uint8 noseIndex, uint8 rightEyeIndex) private pure {
+</span><span>    unchecked {
+</span><span>        bytes memory sprite;
+</span><span>
+</span><span>        sprite = eye(leftEyeIndex);
+</span><span>
+</span><span>        for (uint line = 0; line &lt; LINES; line++) {
+</span><span>            uint inOffset = line * SPRITE_LINE_BYTES;
+</span><span>            uint outOffset = 1 + (line * (WIDTH_BYTES + 1));
+</span><span>
+</span><span>            for (uint column = 0; column &lt; SPRITE_LINE_BYTES; column++) {
+</span><span>                output[offset + outOffset + column] = sprite[inOffset + column];
+</span><span>            }
+</span><span>        }
+</span><span>
+</span><span>        sprite = nose(noseIndex);
+</span><span>
+</span><span>        for (uint line = 0; line &lt; LINES; line++) {
+</span><span>            uint inOffset = line * SPRITE_LINE_BYTES;
+</span><span>            uint outOffset = 1 + SPRITE_LINE_BYTES + (line * (WIDTH_BYTES + 1));
+</span><span>
+</span><span>            for (uint column = 0; column &lt; SPRITE_LINE_BYTES; column++) {
+</span><span>                output[offset + outOffset + column] = sprite[inOffset + column];
+</span><span>            }
+</span><span>        }
+</span><span>
+</span><span>        sprite = eye(rightEyeIndex);
+</span><span>
+</span><span>        for (uint line = 0; line &lt; LINES; line++) {
+</span><span>            uint inOffset = line * SPRITE_LINE_BYTES;
+</span><span>            uint outOffset = 1 + (2 * SPRITE_LINE_BYTES) + (line * (WIDTH_BYTES + 1));
+</span><span>
+</span><span>            for (uint column = 0; column &lt; SPRITE_LINE_BYTES; column++) {
+</span><span>                output[offset + outOffset + column] = sprite[inOffset + column];
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p><a href="https://github.com/SamWilsn/face.png/blob/71ce0f7ff40ed3c50a00708e7b70abef70829f2f/contracts/render.sol#L677"><em>source</em></a></p>
+<p>Since the &quot;compressed&quot; and original data are the same, we can compute the
+[adler32][adler] checksum over the same bytes. The adler32 checksum in Solidity
+looks something like:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span style="color:#b48ead;">library </span><span style="color:#ebcb8b;">Adler32 </span><span>{
+</span><span>    </span><span style="color:#d08770;">uint32 </span><span style="color:#b48ead;">constant private </span><span>MOD = 65521;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">adler32</span><span>(</span><span style="color:#d08770;">bytes </span><span style="color:#b48ead;">memory</span><span> self, </span><span style="color:#d08770;">uint </span><span>offset, </span><span style="color:#d08770;">uint </span><span>end) </span><span style="color:#b48ead;">internal pure </span><span>{
+</span><span>        </span><span style="color:#b48ead;">unchecked </span><span>{
+</span><span>            </span><span style="color:#d08770;">uint32 </span><span>a = </span><span style="color:#d08770;">1</span><span>;
+</span><span>            </span><span style="color:#d08770;">uint32 </span><span>b = </span><span style="color:#d08770;">0</span><span>;
+</span><span>
+</span><span>            </span><span style="color:#65737e;">// Process each byte of the data in order
+</span><span>            </span><span style="color:#b48ead;">for </span><span>(</span><span style="color:#d08770;">uint </span><span>ii = offset; ii &lt; end; ii++) {
+</span><span>                    a = (a + </span><span style="color:#d08770;">uint32</span><span>(</span><span style="color:#d08770;">uint8</span><span>(self[ii]))) % MOD;
+</span><span>                    b = (b + a) % MOD;
+</span><span>            }
+</span><span>
+</span><span>            </span><span style="color:#d08770;">uint32 </span><span>adler = (b &lt;&lt; </span><span style="color:#d08770;">16</span><span>) | a;
+</span><span>
+</span><span>            self[end    ] = </span><span style="color:#d08770;">bytes1</span><span>(</span><span style="color:#d08770;">uint8</span><span>(adler &gt;&gt; 24));
+</span><span>            self[end + </span><span style="color:#d08770;">1</span><span>] = </span><span style="color:#d08770;">bytes1</span><span>(</span><span style="color:#d08770;">uint8</span><span>(adler &gt;&gt; 16));
+</span><span>            self[end + </span><span style="color:#d08770;">2</span><span>] = </span><span style="color:#d08770;">bytes1</span><span>(</span><span style="color:#d08770;">uint8</span><span>(adler &gt;&gt; 8));
+</span><span>            self[end + </span><span style="color:#d08770;">3</span><span>] = </span><span style="color:#d08770;">bytes1</span><span>(</span><span style="color:#d08770;">uint8</span><span>(adler));
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p><a href="https://github.com/SamWilsn/face.png/blob/71ce0f7ff40ed3c50a00708e7b70abef70829f2f/contracts/render.sol#L39"><em>source</em></a></p>
+<p>Then to finish off the <code>IDAT</code> chunk, we compute the crc32 checksum the same way
+we did for the <code>PLTE</code> chunk.</p>
+<h5 id="iend-chunk"><code>IEND</code> Chunk</h5>
+<p>The <code>IEND</code>, or image trailer, chunk<sup class="footnote-reference"><a href="#9">9</a></sup> finishes off the rendered PNG. This
+chunk is just a constant:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>bytes constant private TRAILER = hex&quot;0000000049454e44ae426082&quot;; </span><span style="color:#65737e;">// IEND Chunk
+</span></code></pre>
+<p><a href="https://github.com/SamWilsn/face.png/blob/71ce0f7ff40ed3c50a00708e7b70abef70829f2f/contracts/render.sol#L599"><em>source</em></a></p>
+<p>That's basically an entire PNG rendered dynamically on-chain.</p>
+<p>We did take a couple shortcuts:</p>
+<ul>
+<li>Fixed size/bit depth/color format</li>
+<li>No compression</li>
+<li>Only two colors</li>
+</ul>
+<p>But technically these are valid PNG images!</p>
+<h3 id="challenges">Challenges</h3>
+<p>There were some interesting challenges that came up, some in tooling, some in
+implementation, and some in the marketplace!</p>
+<h4 id="tooling-issues">Tooling Issues</h4>
+<p>While remix and <code>solc</code> have no trouble compiling <code>render.sol</code>, <a href="https://hardhat.org/">hardhat</a> seems
+to have a memory leak and crashes.</p>
+<p>The JavaScript VM in remix will hang if you attempt to render a PNG, at least in
+Firefox. I suspect that all the <code>BigNumber</code> math is messing things up.</p>
+<h4 id="implementation-issues">Implementation Issues</h4>
+<p>I am not a Solidity developer by trade, so a lot of this was new to me. Having
+to manually implement slices and <code>memcpy</code>-type primitives was tedious and I'm
+sure I made mistakes.</p>
+<p>I'd really like to see full support for slices and slice copies, so that it's
+possible to write something like:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span style="color:#b48ead;">contract </span><span style="color:#ebcb8b;">Demo </span><span>{
+</span><span>    </span><span style="color:#d08770;">bytes </span><span style="color:#b48ead;">constant </span><span>FOO = hex</span><span style="color:#a3be8c;">&quot;......&quot;</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">copy</span><span>(</span><span style="color:#d08770;">uint </span><span>offset) </span><span style="color:#b48ead;">private pure returns </span><span>(</span><span style="color:#d08770;">bytes </span><span style="color:#b48ead;">memory</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">return</span><span> FOO[offset </span><span style="color:#b48ead;">:</span><span> offset + </span><span style="color:#d08770;">3</span><span>];
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<h4 id="marketplace-issues">Marketplace Issues</h4>
+<p>While I might write another post on the topic of <a href="https://eips.ethereum.org/EIPS/eip-721">ERC-721 metadata</a>, one
+of the biggest and most annoying issues I encountered was in the encoding of
+images into a data URL (yes, <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/Data_URIs">data UR<strong>L</strong></a>), nested in JSON, also
+encoded into another data URL.</p>
+<p>The primary marketplace I used to test <code>face.png</code> is <a href="https://opensea.io/collection/face-png">OpenSea</a>. OpenSea is a
+pretty decent website, which is why I was quite surprised they don't support
+rendering PNG images in data URLs (eg. <code>data:image/png;base64,...</code>) directly,
+but do support PNG images embedded in an SVG image.</p>
+<p>If you're curious why you get an SVG when you <code>Save As...</code> your favourite
+<code>face.png</code>s from OpenSea, this is why.</p>
+<p>So we have a PNG, encoded into base64, packed into an SVG, encoded into base64,
+packed into JSON, ALSO ENCODED INTO BASE64!</p>
+<p><img src="./dawg.jpeg" alt="yo dawg" /></p>
+<h2 id="iend-the-end"><code>IEND</code> (The End)</h2>
+<p>Thanks for taking the time to read about my wasted (but quite enjoyable)
+weekend! If you bought a token, I really appreciate it, but don't quite
+understand why.</p>
+<p>If this post gets some attention, I might write a post on the token itself, on
+the random number algorithm I used for attributes, and possibly even on the
+terrible tooling I built around this project. Stay tuned, and happy hacking!</p>
+<hr />
+<p><a href="https://facepng.art">facepng.art</a> if you want a face of your own</p>
+<hr />
+<h2 id="references">References</h2>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p><a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Structure.html#PNG-file-signature">PNG file signature</a></p>
+</div>
+<div class="footnote-definition" id="2"><sup class="footnote-definition-label">2</sup>
+<p><a href="www.libpng.org/pub/png/spec/1.2/PNG-Structure.html#Chunk-layout">Chunk layout</a></p>
+</div>
+<div class="footnote-definition" id="3"><sup class="footnote-definition-label">3</sup>
+<p><a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Compression.html">PNG Compression</a></p>
+</div>
+<div class="footnote-definition" id="4"><sup class="footnote-definition-label">4</sup>
+<p><a href="http://www.libpng.org/pub/png/spec/1.2/PNG-DataRep.html#DR.Filtering">Filtering</a></p>
+</div>
+<div class="footnote-definition" id="5"><sup class="footnote-definition-label">5</sup>
+<p><a href="http://www.libpng.org/pub/png/spec/1.2/PNG-DataRep.html#DR.Interlaced-data-order">Interlaced data order</a></p>
+</div>
+<div class="footnote-definition" id="6"><sup class="footnote-definition-label">6</sup>
+<p><a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html#C.PLTE">PTLE</a></p>
+</div>
+<div class="footnote-definition" id="7"><sup class="footnote-definition-label">7</sup>
+<p><a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html#C.IDAT">IDAT</a></p>
+</div>
+<div class="footnote-definition" id="8"><sup class="footnote-definition-label">8</sup>
+<p><a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Filters.html">PNG Filters</a></p>
+</div>
+<div class="footnote-definition" id="9"><sup class="footnote-definition-label">9</sup>
+<p><a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html#C.IEND">IEND</a></p>
+</div>
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>

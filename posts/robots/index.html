@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    Robots!
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    Robots!
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Sun Jun 10, 2012
+
+        
+        
+            
+                &#183; 441 words
+            
+        
+        
+            
+            
+                &#183; 3 min
+            
+        
+        
+        <hr/>
+    
+    <p>If you've been around me in the past couple of days, you've probably heard me talking endlessly about robots, and possibly PyPy, and my trials and tribulations with RPython.  I've been working pretty hard on building something fun that isn't a website, and I think I've succeeded, at least at entertaining myself.</p>
+<p>A little bit of back story would probably be useful here.  I first got interested in programming when I read about Java, back in the early 2000s.  I saw a magazine in a news stand proclaiming the awesomeness of Sun's baby, and had to buy it.  Thankfully as a ten year old, my money was practically non-existent and I was unable to acquire it.  I forgot about programming for months, until Christmas rolled around and my parents bought me Borland's C++ with a Sam's Teach Yourself C++ in 21 days.</p>
+<p>After miserably failing to wrap my brain around pointers, I began looking at other ways to program, and I eventually discovered AT Robots, Corewars, and other awesome games.  These games, especially Robocom, are what inspired tonight's project.</p>
+<p>I give you Robots!  This is my way of saying thank you to those who got me interested in programming (I hope no one ever finds this post, since its a fairly terrible thank you, but I digress.)</p>
+<p>In Robots! you program a single robot whose goal is to eliminate the other Robot teams on the field.  Robots can move, scan, replicate and transfer instructions between each other.  The user interface is limited to a grid with coloured circles, or an even worse command line interface, but I think it gets the point across:</p>
+<p><img src="./gui.png" alt="Robots, a wxPython Application" /></p>
+<p>The game is played on a 100 by 100 grid where the edges wrap around, torus style.</p>
+<p>Robots are programmed in a very simple assembly like language that is interpreted by an RPython program.  The game state is transferred to the user interface, which is written in full Python with wxPython and Cairo.</p>
+<p>A sample Robot program:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>:start
+</span><span>build $left
+</span><span>
+</span><span>:program
+</span><span>set L1 :end
+</span><span>sub L1 1
+</span><span>
+</span><span>:program-loop
+</span><span>if $lt L1 :new
+</span><span>jump (:start)       &#39; Exit the loop when the counter reaches :new
+</span><span>
+</span><span>set L0 L1           &#39; Copy source location to L0
+</span><span>sub L0 :new         &#39; Make relative to :start
+</span><span>
+</span><span>xfer $left L1 L0    &#39; Transfer the new instruction from L1 to L0
+</span><span>sub L1 1
+</span><span>jump (:program-loop)
+</span><span>
+</span><span>:new
+</span><span>go $up
+</span><span>jump (:new)
+</span><span>:end
+</span></code></pre>
+<p>This simple program builds copies of itself and sends them on their merry way around the board.</p>
+<p>Feel free to take a look at the code over on GitHub and play around:</p>
+<p><a href="https://github.com/tecywiz121/robots">https://github.com/tecywiz121/robots</a></p>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>

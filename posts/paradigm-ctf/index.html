@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    BABYCRYPTO Challenge - Paradigm CTF (Part 1 of 3)
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    BABYCRYPTO Challenge - Paradigm CTF (Part 1 of 3)
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Fri Feb 12, 2021
+
+        
+        
+            
+                &#183; 1254 words
+            
+        
+        
+            
+            
+                &#183; 7 min
+            
+        
+        
+        <hr/>
+    
+    <style>
+pre {
+line-height: 1.3em !important;
+}
+</style>
+<h2 id="introduction">Introduction</h2>
+<p>Paradigm, a crypto-focused investment firm, hosted a capture-the-flag style competition over the past weekend with over $10,000 in prizes split among the top three teams. Our team, dilicious<sup class="footnote-reference"><a href="#1">1</a></sup> <sup class="footnote-reference"><a href="#2">2</a></sup>, competed and took first place, solving 15 out of a possible 17 challenges.</p>
+<p>If you aren't familiar with the term, a capture-the-flag competition (at least in the software industry) is a cyber-security challenge where participants exploit vulnerabilities to achieve goals (analogous to capturing the flag in meatspace.)</p>
+<p>This particular competition was focused on the Ethereum blockchain and related technologies.</p>
+<h3 id="our-team">Our Team</h3>
+<p>Our team, in alphabetical order by the first letters of our Twitter usernames:</p>
+<ul>
+<li><a href="https://twitter.com/adietrichs">@adietrichs</a> <sup class="footnote-reference"><a href="#3">3</a></sup></li>
+<li><a href="https://twitter.com/GNSPS">@GNSPS</a></li>
+<li><a href="https://twitter.com/joranhonig">@joranhonig</a></li>
+<li><a href="https://twitter.com/lethalspoons">@lethalspoons</a></li>
+<li><a href="https://twitter.com/lightclients">@lightclients</a> <sup class="footnote-reference"><a href="#3">3</a></sup></li>
+<li><a href="https://twitter.com/sbetamc">@sbetamc</a></li>
+<li><a href="https://twitter.com/_SamWilsn_">@_SamWilsn_</a> <sup class="footnote-reference"><a href="#3">3</a></sup></li>
+<li><a href="https://twitter.com/smarx">@smarx</a></li>
+<li><a href="https://twitter.com/vwuestholz">@vwuestholz</a></li>
+<li><a href="https://twitter.com/wadeAlexC">@wadeAlexC</a></li>
+<li><a href="https://twitter.com/wolflo0">@wolflo0</a></li>
+</ul>
+<p>Go follow them or something, I don't know.</p>
+<h2 id="challenges">Challenges</h2>
+<p>The competition was split into 17 challenges, covering topics from reverse engineering, to cryptography, to market manipulation. Considering I'm an expert in exactly zero of those fields, I'm quite surprised I have anything to write up!</p>
+<h3 id="babycrypto">BABYCRYPTO</h3>
+<p>The first challenge I opened was BABYCRYPTO. Considering the name, it seemed like the second easiest challenge (after HELLO, which @adietrichs had already taken) and I figured if I was going to be able to contribute anything, it would be here.</p>
+<p>Clicking the challenge, I was greeted by a pleasantly green-and-black page:</p>
+<p><img src="./babycrypto.png" alt="I've written a super simple program to sign some data. Hopefully I didn't mess anything up!" /> <em>Top points to Paradigm for the hacker-esque vibe.</em></p>
+<p>Based on my minutes of experience in other software puzzle games, I suspected that this might be a XOR cypher or a Caesar square, so I quickly downloaded all three of the challenge zips, and spent the next half-an-hour or so setting up Docker and building images. The Dockerfiles in the archives turned out to be the biggest red herring of the entire weekend, tricking several of us into a bunch of work that was ultimately pointless. <sup class="footnote-reference"><a href="#4">4</a></sup></p>
+<p>The contents of the three BABYCRYPTO archives:</p>
+<pre><font color="#3465A4"><b>.</b></font>
+├── <font color="#3465A4"><b>babycrypto</b></font>
+│   └── <font color="#3465A4"><b>public</b></font>
+│       ├── <font color="#3465A4"><b>deploy</b></font>
+│       │   ├── chal.py
+│       │   └── requirements.txt
+│       └── Dockerfile
+├── <font color="#3465A4"><b>challenge_base</b></font>
+│   ├── 00-create-xinetd-service
+│   ├── 99-start-xinetd
+│   ├── Dockerfile
+│   ├── <font color="#4E9A06"><b>entrypoint.sh</b></font>
+│   └── <font color="#4E9A06"><b>handler.sh</b></font>
+└── <font color="#3465A4"><b>eth_challenge_base</b></font>
+    ├── 98-start-gunicorn
+    ├── Dockerfile
+    └── <font color="#3465A4"><b>eth_sandbox</b></font>
+        ├── auth.py
+        ├── hashcash.py
+        ├── __init__.py
+        ├── launcher.py
+        └── server.py
+</pre>
+<p>The <del>only important</del> file I chose to focus on was <code>chal.py</code>, which ended up being a good place to start for most of the future challenges too.</p>
+<p>Here is <code>chal.py</code> in its entirety:</p>
+<pre data-lang="python" style="background-color:#2b303b;color:#c0c5ce;" class="language-python "><code class="language-python" data-lang="python"><span style="color:#b48ead;">from </span><span>random </span><span style="color:#b48ead;">import </span><span>SystemRandom
+</span><span style="color:#b48ead;">from </span><span>ecdsa </span><span style="color:#b48ead;">import </span><span>ecdsa
+</span><span style="color:#b48ead;">import </span><span>sha3
+</span><span style="color:#b48ead;">import </span><span>binascii
+</span><span style="color:#b48ead;">from </span><span>typing </span><span style="color:#b48ead;">import </span><span>Tuple
+</span><span style="color:#b48ead;">import </span><span>uuid
+</span><span style="color:#b48ead;">import </span><span>os
+</span><span>
+</span><span>
+</span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">gen_keypair</span><span>() -&gt; Tuple[ecdsa.Private_key, ecdsa.Public_key]:
+</span><span>    </span><span style="color:#65737e;">&quot;&quot;&quot;
+</span><span style="color:#65737e;">    generate a new ecdsa keypair
+</span><span style="color:#65737e;">    &quot;&quot;&quot;
+</span><span>    g = ecdsa.generator_secp256k1
+</span><span>    d = </span><span style="color:#bf616a;">SystemRandom</span><span>().</span><span style="color:#bf616a;">randrange</span><span>(</span><span style="color:#d08770;">1</span><span>, g.</span><span style="color:#bf616a;">order</span><span>())
+</span><span>    pub = ecdsa.</span><span style="color:#bf616a;">Public_key</span><span>(g, g * d)
+</span><span>    priv = ecdsa.</span><span style="color:#bf616a;">Private_key</span><span>(pub, d)
+</span><span>    </span><span style="color:#b48ead;">return </span><span>priv, pub
+</span><span>
+</span><span>
+</span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">gen_session_secret</span><span>() -&gt; int:
+</span><span>    </span><span style="color:#65737e;">&quot;&quot;&quot;
+</span><span style="color:#65737e;">    generate a random 32 byte session secret
+</span><span style="color:#65737e;">    &quot;&quot;&quot;
+</span><span>    </span><span style="color:#b48ead;">with </span><span style="color:#96b5b4;">open</span><span>(&quot;</span><span style="color:#a3be8c;">/dev/urandom</span><span>&quot;, &quot;</span><span style="color:#a3be8c;">rb</span><span>&quot;) </span><span style="color:#b48ead;">as </span><span>rnd:
+</span><span>        seed1 = </span><span style="color:#bf616a;">int</span><span>(binascii.</span><span style="color:#bf616a;">hexlify</span><span>(rnd.</span><span style="color:#bf616a;">read</span><span>(</span><span style="color:#d08770;">32</span><span>)), </span><span style="color:#d08770;">16</span><span>)
+</span><span>        seed2 = </span><span style="color:#bf616a;">int</span><span>(binascii.</span><span style="color:#bf616a;">hexlify</span><span>(rnd.</span><span style="color:#bf616a;">read</span><span>(</span><span style="color:#d08770;">32</span><span>)), </span><span style="color:#d08770;">16</span><span>)
+</span><span>    </span><span style="color:#b48ead;">return </span><span>seed1 ^ seed2
+</span><span>
+</span><span>
+</span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">hash_message</span><span>(</span><span style="color:#bf616a;">msg</span><span>: str) -&gt; int:
+</span><span>    </span><span style="color:#65737e;">&quot;&quot;&quot;
+</span><span style="color:#65737e;">    hash the message using keccak256, truncate if necessary
+</span><span style="color:#65737e;">    &quot;&quot;&quot;
+</span><span>    k = sha3.</span><span style="color:#bf616a;">keccak_256</span><span>()
+</span><span>    k.</span><span style="color:#bf616a;">update</span><span>(msg.</span><span style="color:#bf616a;">encode</span><span>(&quot;</span><span style="color:#a3be8c;">utf8</span><span>&quot;))
+</span><span>    d = k.</span><span style="color:#bf616a;">digest</span><span>()
+</span><span>    n = </span><span style="color:#bf616a;">int</span><span>(binascii.</span><span style="color:#bf616a;">hexlify</span><span>(d), </span><span style="color:#d08770;">16</span><span>)
+</span><span>    olen = ecdsa.generator_secp256k1.</span><span style="color:#bf616a;">order</span><span>().</span><span style="color:#bf616a;">bit_length</span><span>() or </span><span style="color:#d08770;">1
+</span><span>    dlen = </span><span style="color:#96b5b4;">len</span><span>(d)
+</span><span>    n &gt;&gt;= </span><span style="color:#96b5b4;">max</span><span>(</span><span style="color:#d08770;">0</span><span>, dlen - olen)
+</span><span>    </span><span style="color:#b48ead;">return </span><span>n
+</span><span>
+</span><span>
+</span><span style="color:#b48ead;">if </span><span>__name__ == &quot;</span><span style="color:#a3be8c;">__main__</span><span>&quot;:
+</span><span>    flag = os.</span><span style="color:#bf616a;">getenv</span><span>(&quot;</span><span style="color:#a3be8c;">FLAG</span><span>&quot;, &quot;</span><span style="color:#a3be8c;">PCTF</span><span style="color:#d08770;">{placeholder}</span><span>&quot;)
+</span><span>
+</span><span>    priv, pub = </span><span style="color:#bf616a;">gen_keypair</span><span>()
+</span><span>    session_secret = </span><span style="color:#bf616a;">gen_session_secret</span><span>()
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">for </span><span style="color:#bf616a;">_ </span><span style="color:#b48ead;">in </span><span style="color:#96b5b4;">range</span><span>(</span><span style="color:#d08770;">4</span><span>):
+</span><span>        message = </span><span style="color:#96b5b4;">input</span><span>(&quot;</span><span style="color:#a3be8c;">message? </span><span>&quot;)
+</span><span>        hashed = </span><span style="color:#bf616a;">hash_message</span><span>(message)
+</span><span>        sig = priv.</span><span style="color:#bf616a;">sign</span><span>(hashed, session_secret)
+</span><span>        </span><span style="color:#96b5b4;">print</span><span>(</span><span style="color:#b48ead;">f</span><span>&quot;</span><span style="color:#a3be8c;">r=0x</span><span>{sig.r</span><span style="color:#d08770;">:032x</span><span>}&quot;)
+</span><span>        </span><span style="color:#96b5b4;">print</span><span>(</span><span style="color:#b48ead;">f</span><span>&quot;</span><span style="color:#a3be8c;">s=0x</span><span>{sig.s</span><span style="color:#d08770;">:032x</span><span>}&quot;)
+</span><span>
+</span><span>    test = </span><span style="color:#bf616a;">hash_message</span><span>(uuid.</span><span style="color:#bf616a;">uuid4</span><span>().hex)
+</span><span>    </span><span style="color:#96b5b4;">print</span><span>(</span><span style="color:#b48ead;">f</span><span>&quot;</span><span style="color:#a3be8c;">test=0x</span><span>{test</span><span style="color:#d08770;">:032x</span><span>}&quot;)
+</span><span>
+</span><span>    r = </span><span style="color:#bf616a;">int</span><span>(</span><span style="color:#96b5b4;">input</span><span>(&quot;</span><span style="color:#a3be8c;">r? </span><span>&quot;), </span><span style="color:#d08770;">16</span><span>)
+</span><span>    s = </span><span style="color:#bf616a;">int</span><span>(</span><span style="color:#96b5b4;">input</span><span>(&quot;</span><span style="color:#a3be8c;">s? </span><span>&quot;), </span><span style="color:#d08770;">16</span><span>)
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">if </span><span>not pub.</span><span style="color:#bf616a;">verifies</span><span>(test, ecdsa.</span><span style="color:#bf616a;">Signature</span><span>(r, s)):
+</span><span>        </span><span style="color:#96b5b4;">print</span><span>(&quot;</span><span style="color:#a3be8c;">better luck next time</span><span>&quot;)
+</span><span>        </span><span style="color:#bf616a;">exit</span><span>(</span><span style="color:#d08770;">1</span><span>)
+</span><span>
+</span><span>    </span><span style="color:#96b5b4;">print</span><span>(flag)
+</span></code></pre>
+<p>With the <code>requirements.txt</code> file, I was able to get the program to run locally:</p>
+<pre>
+message?
+</pre>
+<p>This is Python3, so that rules out any shenanigans with <code>input</code> vs. <code>raw_input</code>. I didn't notice any other particularly interesting points in the code itself, so that means it must <em>actually be a cryptography challenge!</em></p>
+<p>Oh god. Its ECDSA. I knew I should've paid more attention in my undergraduate cryptography class. I was about to ask @adietrichs if I could take a look at HELLO instead, when I noticed this interesting pattern:</p>
+<pre>
+message? wanna switch?
+<font color="#3465A4">r=0xe430b3a398f2320556eef81c1c523ea5ae0a920f493c8376eafcb0dc9cd75b89</font>
+s=0x4a19d0b156a9d10b0a86b729316909cdc8634ec23aa38f5f891e2599fc316a81
+message? no
+<font color="#3465A4">r=0xe430b3a398f2320556eef81c1c523ea5ae0a920f493c8376eafcb0dc9cd75b89</font>
+s=0x43d8ec82d7b6b1f3c8ed41b0ba682d5291f6d4a922a57729fa716dccd0f237d6
+message? &lt;/3
+<font color="#3465A4">r=0xe430b3a398f2320556eef81c1c523ea5ae0a920f493c8376eafcb0dc9cd75b89</font>
+s=0xbbfb7b34c31f025bddb8724a53dae7dd5a17c489587b881b8ed0dc5453c07e87
+</pre>
+<p>The <code>r</code> values for the three different messages were the same! As established earlier, I'm no cryptography expert, and I have no idea what <code>r</code> actually means, but I <strong>do</strong> know that you should get different outputs when signing different inputs, so off to search the internet!</p>
+<video style="width: 100%" src="./aha.mp4" controls autoplay loop muted>
+    <p>
+        Your browser doesn't seem to support <a href="./aha.mp4">this video</a>.
+        You aren't missing much. Just me searching the internet for what to do
+        with a repeated <code>r</code> value.
+    </p>
+</video>
+<p>Aha! We have our vulnerability. Repeating something about something lets you extract the private key.</p>
+<p>A little more searching around turned up a plethora of git repositories claiming to be able to extract a private key based on this vulnerability. A few moments later, and I had this script:</p>
+<pre data-lang="python" style="background-color:#2b303b;color:#c0c5ce;" class="language-python "><code class="language-python" data-lang="python"><span style="color:#b48ead;">from </span><span>ecdsa </span><span style="color:#b48ead;">import </span><span>ecdsa, SigningKey
+</span><span style="color:#b48ead;">from </span><span>ecdsa.numbertheory </span><span style="color:#b48ead;">import </span><span>inverse_mod
+</span><span style="color:#b48ead;">from </span><span>hashlib </span><span style="color:#b48ead;">import </span><span>sha1
+</span><span>
+</span><span>g = ecdsa.generator_secp256k1
+</span><span>publicKeyOrderInteger = g.</span><span style="color:#bf616a;">order</span><span>()
+</span><span>
+</span><span>r = &quot;</span><span style="color:#a3be8c;">e430b3a398f2320556eef81c1c523ea5ae0a920f493c8376eafcb0dc9cd75b89</span><span>&quot;
+</span><span>sA = &quot;</span><span style="color:#a3be8c;">4a19d0b156a9d10b0a86b729316909cdc8634ec23aa38f5f891e2599fc316a81</span><span>&quot;
+</span><span>sB = &quot;</span><span style="color:#a3be8c;">43d8ec82d7b6b1f3c8ed41b0ba682d5291f6d4a922a57729fa716dccd0f237d6</span><span>&quot;
+</span><span>
+</span><span>hashA = &quot;</span><span style="color:#a3be8c;">24281772548044994405505787307091019721595367071300198475142035580469771474091</span><span>&quot;
+</span><span>hashB = &quot;</span><span style="color:#a3be8c;">56710668495515998944273818574660611208941006033402527734960197520384934694586</span><span>&quot;
+</span><span>
+</span><span>r1 = </span><span style="color:#bf616a;">int</span><span>(r, </span><span style="color:#d08770;">16</span><span>)
+</span><span>s1 = </span><span style="color:#bf616a;">int</span><span>(sA, </span><span style="color:#d08770;">16</span><span>)
+</span><span>s2 = </span><span style="color:#bf616a;">int</span><span>(sB, </span><span style="color:#d08770;">16</span><span>)
+</span><span>
+</span><span style="color:#65737e;">#Convert Hex into Int
+</span><span>L1 = </span><span style="color:#bf616a;">int</span><span>(hashA, </span><span style="color:#d08770;">10</span><span>)
+</span><span>L2 = </span><span style="color:#bf616a;">int</span><span>(hashB, </span><span style="color:#d08770;">10</span><span>)
+</span><span>
+</span><span>numerator = (((s2 * L1) % publicKeyOrderInteger) - ((s1 * L2) % publicKeyOrderInteger))
+</span><span>denominator = </span><span style="color:#bf616a;">inverse_mod</span><span>(r1 * ((s1 - s2) % publicKeyOrderInteger), publicKeyOrderInteger)
+</span><span>
+</span><span>privateKey = numerator * denominator % publicKeyOrderInteger
+</span><span>
+</span><span style="color:#96b5b4;">print</span><span>(privateKey)
+</span></code></pre>
+<p>The constants:</p>
+<ul>
+<li><code>g</code> is the particular curve that <code>chal.py</code> used.</li>
+<li><code>r</code> is the shared value from the two signatures.</li>
+<li><code>sA</code> and <code>sB</code> are the <code>s</code> values from the two signatures.</li>
+<li><code>hashA</code> and <code>hashB</code> are the outputs of <code>hash_message</code> in the original script, for the given inputs.</li>
+</ul>
+<p>The output:</p>
+<pre>
+82639917221039576394263609841358608750060353480659277072454055536914923163809
+</pre>
+<p>Hack that back into the original program (by modifying <code>gen_keypair</code>) and you can sign arbitrary messages! <sup class="footnote-reference"><a href="#5">5</a></sup></p>
+<h1 id="conclusion">Conclusion</h1>
+<p>Well, that's it! That's all of BABYCRYPTO. Stay tuned for two more posts on the BROKER and BABYREV challenges.</p>
+<h2 id="footnotes">Footnotes</h2>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p>Although I wasn't part of the subcommittee on team naming, I'm pretty sure dilicious is just diligence plus delicious.</p>
+</div>
+<div class="footnote-definition" id="2"><sup class="footnote-definition-label">2</sup>
+<p>It took me longer than I care to admit to realize that diligence is actually ConsenSys Diligence, and my confusion explains why <a href="./dill.jpg">this</a> was our Discord server's icon, instead of something relevant.</p>
+</div>
+<div class="footnote-definition" id="3"><sup class="footnote-definition-label">3</sup>
+<p>Actually part of ConsenSys Quilt, not Diligence.</p>
+</div>
+<div class="footnote-definition" id="4"><sup class="footnote-definition-label">4</sup>
+<p>I've been informed that the Docker containers would've let us test solutions locally, but I still assert they were a red herring.</p>
+</div>
+<div class="footnote-definition" id="5"><sup class="footnote-definition-label">5</sup>
+<p>Apologies if you were looking for any in-depth analysis of how the ECDSA private key recovery actually works. You can find the repository I used as a starting point <a href="https://github.com/Marsh61/ECDSA-Nonce-Reuse-Exploit-Example/blob/master/Attack-Main.py">here</a>. It has comments!</p>
+</div>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>

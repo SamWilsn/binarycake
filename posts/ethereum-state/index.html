@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    State Provider Models in Ethereum 2.0
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    State Provider Models in Ethereum 2.0
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Thu Jan  9, 2020
+
+        
+        
+            
+                &#183; 2899 words
+            
+        
+        
+            
+            
+                &#183; 15 min
+            
+        
+        
+        <hr/>
+    
+    <p><em>This post was co-authored by <a href="https://ethresear.ch/u/adietrichs/summary">@adietrichs</a> and <a href="https://ethresear.ch/u/samwilsn/summary">@samwilsn</a>, with significant input by <a href="https://ethresear.ch/u/villanuevawill/summary">@villanuevawill</a> and the Quilt team. Originally posted on <a href="https://ethresear.ch/t/state-provider-models-in-ethereum-2-0/6750">ethresear.ch</a>.</em></p>
+<h2 id="introduction">Introduction</h2>
+<p>Ethereum 2.0's statelessness means that transactions have to bring their own state. More precisely, for every transaction a <strong>block proposer (BP)</strong> wants to include into a block, they also have to include all state accessed by that transaction, as well as the corresponding witnesses. Neither the <strong>user</strong> creating the transaction nor the BP are assumed to hold state. Thus, a new kind of actor is required, whose role it is to hold and provide such state. This actor is commonly known as a <strong>state provider (SP)</strong>.</p>
+<p>Regardless of how BPs and SPs exchange state, it is likely going to be necessary for users to fetch state before creating a transaction. Examples include fetching contract bytecode to estimate gas cost or checking an account balance. This means SPs will expose a pull-like interface for users. An optional incentive layer could be added with payments for state via payment channels, although it seems feasible to start without such a system and rely on SPs altruistically providing state to users (as is currently the case in Ethereum 1.0).</p>
+<h3 id="comparison-criteria">Comparison Criteria</h3>
+<p>There are several different ways to integrate SPs into the overall system. In the following sections, we give an overview over several proposals. Besides a general description of each model, we compare the following properties:</p>
+<h4 id="state-access-restrictions">State Access Restrictions</h4>
+<p>As transactions operate on the current state at the time of execution, their behaviour <!-- SW: I appreciate the Canadian spelling ;) --> changes as the underlying state changes. In particular, for some transaction, the locations of state access might vary. This could either happen as a result of simple branching (e.g. <code>if</code>) or if the location is calculated at runtime. We refer to either case as a <strong>dynamic state access (DSA)</strong>. In a stateless model, this complicates the transaction creation process. The problem is that it might not be possible to provide state for some of those transactions in advance (i.e. before the exact global state is known against which the tx will be executed). The models presented differ in the extent to which they support those transactions.</p>
+<p>Under a model restricting dynamic state access, it seems very likely that <strong>Eth1 <em>cannot</em> become an Eth2 execution environment (EE)</strong> and will always require special treatment.</p>
+<h4 id="incentives">Incentives</h4>
+<p>The rewards for SPs are compared on:</p>
+<ul>
+<li>Who pays the reward, and how is it calculated?</li>
+<li>Are altruistic SPs viable initially, and if so, can incentives be added later?</li>
+</ul>
+<h4 id="centralization-risks">Centralization Risks</h4>
+<p>Each model presents different levels of risk related to centralization:</p>
+<ul>
+<li>Who can censor transactions, and to what extent?</li>
+<li>How much state is a single SP expected to store? What hardware will be required?</li>
+<li>How much do BPs and SPs have to trust each other?</li>
+</ul>
+<h4 id="timing-constraints">Timing Constraints</h4>
+<p>BPs have a fixed amount of time to propose a block. In this section, we will highlight operations in each model that might be constrained by this time limit.</p>
+<h4 id="attributability-of-missing-state">Attributability of Missing State</h4>
+<p>In Eth1, miners can be certain that they will be paid as soon as the initial signature verification and balance and nonce checks for a given transaction are complete. In Eth2, this depends on whether missing state is an attributable fault. If it is, the BP can still be paid for a transaction failing due to missing state. Otherwise, transactions missing state will be non-includable, which BPs might only notice after running the full (potentially lengthy) transaction.</p>
+<p>If BPs run transactions that fail due to missing state, and those transactions are non-includable (i.e. unable to pay fees), BPs are vulnerable to a nearly zero cost denial of service attack.</p>
+<h2 id="models">Models</h2>
+<table><thead><tr><th align="center">Model</th><th align="center">State Access</th><th align="center">Incentives</th><th align="center">Centralization Risks</th><th align="center">Timing Constraints</th></tr></thead><tbody>
+<tr><td align="center"><a href="https://binarycake.ca/posts/ethereum-state/#direct-push-model">Direct Push</a></td><td align="center">Restricted</td><td align="center">Altruism <em>or</em> Payment Channels</td><td align="center">Well-known SP are preferred</td><td align="center">None</td></tr>
+<tr><td align="center"><a href="https://binarycake.ca/posts/ethereum-state/#relayed-push-model">Relayed Push</a></td><td align="center">Unrestricted</td><td align="center">Bundle Market <em>or</em> Exclusivity Period</td><td align="center">Censorship potential</td><td align="center">Update &amp; transfer bundle within one slot</td></tr>
+<tr><td align="center"><a href="https://binarycake.ca/posts/ethereum-state/#pull-model">Pull</a></td><td align="center">Unrestricted</td><td align="center">Payment Channels</td><td align="center">Well-known SP are preferred</td><td align="center">Acquire bundle state within one slot</td></tr>
+</tbody></table>
+<h3 id="direct-push-model">Direct Push Model</h3>
+<p><img src="./direct-push.png" alt="Two users pushing state directly to BP" /></p>
+<p>A user acquires the necessary state directly from one or more SPs, then sends the transaction with that state attached to the network. Nodes maintain a pool of pending transactions, refreshing witnesses as blocks are produced. When creating a block, a BP chooses a subset of the pending transactions from the pool to include into the new block.</p>
+<h4 id="state-access-restrictions-1">State Access Restrictions</h4>
+<p>The user creating a transaction is the only actor in the system providing state for that transaction. In general, there is no way to ensure that this state is sufficient for any state access occurring later on when the transaction is included into a block. Thus, under the Direct Push Model, only transactions where state access is predictable are possible. Besides transactions with purely static state access, contract creators could design their contracts to have predictable state access using annotations such as access lists, where the contract specifies all locations it can possibly access during execution. Together with ways to avoid dynamic state access patterns (see e.g. <a href="https://ethresear.ch/t/common-classes-of-contracts-and-how-they-would-handle-contract-state-root-plus-witness-architecture/4547">this related post</a> by Vitalik in the Eth 1.x context), the resulting model might still offer sufficient functionality. </p>
+<p>However, this would be a clear departure from the current Eth1 system, and would, in particular, make any plans to transition Eth1 into an Eth2 EE impossible.</p>
+<h4 id="incentives-1">Incentives</h4>
+<p>This model would just rely on the general SP network. As discussed above, it seems feasible to start without an incentive system.</p>
+<p>Incentivization could be added via payment channels. Given that every user would have to have an open payment channel with one or several state providers, this option would be rather complex.</p>
+<h4 id="centralization-risks-1">Centralization Risks</h4>
+<p>No individual SP can censor a transaction, since users are able to issue multiple queries to different SPs.</p>
+<p>SPs can hold any subset of state, so the hardware requirements are minimal.</p>
+<p>Monetary incentives would likely encourage some SP centralization, since users would need to trust SPs when purchasing state through a payment channel.</p>
+<h4 id="timing-constraints-1">Timing Constraints</h4>
+<p>No timing constraints.</p>
+<h4 id="attributability-of-missing-state-1">Attributability of Missing State</h4>
+<p>Missing state is attributable to the user. In most cases, a BP can include a transaction with insufficient state and have the user pay for it. The only exception is state missing for the initial signature verification or fee payment, in which case the transaction could not be included. Analogous to the Eth1 case, nodes in the network would be expected to drop such transactions from the transaction pool. Some restrictions would have to apply for maximum gas usage for these initial transaction parts.</p>
+<h4 id="key-points">Key Points</h4>
+<ul>
+<li>Main Benefit: Simplicity. No further specialized SPs or incentive systems necessary. No particular timing constraints.</li>
+<li>Main Drawback: Only works with transactions that know in advance all state they could potentially access. This limits functionality of the overall system. While some mitigations seem possible, composability would remain severely limited. In particular, Eth1 could not become an Eth2 EE under this model.</li>
+</ul>
+<h3 id="relayed-push-model">Relayed Push Model</h3>
+<p><img src="./relayed-push.png" alt="Two users submitting transactions through relayers" /></p>
+<p>Users send transactions to one of several <strong>Relayers</strong> (specialized SPs). The relayer bundles the transactions, attaches state and relays the bundle to the network. Nodes maintain a pool of pending bundles. As blocks are produced, relayers relay updates to their bundles, while all nodes refresh the corresponding witnesses. When creating a block, a BP chooses one pending up-to-date bundle from the pool to include into the new block.</p>
+<p>Alternatively, if a pool of bundles proves infeasible, the system could function without it. Relayers only advertise the existence of bundles. A BP then reaches out to a relayer directly to acquire the bundle and include it into a new block.</p>
+<h4 id="state-access-restrictions-2">State Access Restrictions</h4>
+<p>No restrictions. Having relayers publish updates to their bundles every slot ensures that the state provided for these bundles is sufficient. Furthermore, any new block only includes one bundle, preventing interference between bundles.</p>
+<h4 id="incentives-2">Incentives</h4>
+<p>Incentivizing relayers is complicated because, once state and witnesses have been revealed, users and/or BPs have the opportunity to recreate the bundle without the payment to the relayer.</p>
+<p>Two possible solutions:</p>
+<ul>
+<li>In the case without a pool, transaction bundles are not public. Relayers sell the bundles with state attached to BPs (for a price lower than the transaction fees), forming a bundle market. There are several risks to BPs: a transaction might have been previously included in another block, otherwise become invalid, or pay lower transaction fees than advertised.</li>
+<li>Alternatively—with or without a pool—transactions can include a payment to a specific relayer. The user promises an exclusivity period (i.e. a couple of slots), during which the user may not create any other transactions. The EE would have to provide a method to &quot;slash&quot; users signing two or more transactions with overlapping exclusivity periods. As users don't have a stake locked up, it is unclear how to deal with slashings for users without a sufficient account balance.</li>
+</ul>
+<h4 id="centralization-risks-2">Centralization Risks</h4>
+<p>Depending on how the relayer incentives are structured:</p>
+<ul>
+<li>Assuming merging bundles is complex (because of DSA), a bundle market leads to high centralization and allows a single relayer to censor transactions. Because of the risks to BPs outlined above, BPs will likely prefer to deal with well-known and trusted relayers. Individual users will not be able to offer bundles with high enough fees to compete with these well-known relayers.</li>
+<li>Using an exclusivity period and a bundle pool leads to a higher degree of decentralization, at the cost of user convenience and a more complex pool implementation. Any user could in theory retrieve a bundle from the pool, extend it with their transaction, and relay it with a higher fee payment.</li>
+</ul>
+<h4 id="timing-constraints-2">Timing Constraints</h4>
+<p>To support arbitrary transactions, any bundle included into a block has to be up-to-date. Relayers have to download the previous block, create and send an update for their bundle, have that update reach the BP, and have the BP include the updated bundle into a new block, all within one slot's time.</p>
+<h4 id="attributability-of-missing-state-2">Attributability of Missing State</h4>
+<p>Missing state is attributable to the relayer. Relayers could be required (or could voluntarily choose) to send a &quot;refund transaction&quot; along with any relayed transaction. The refund transaction would be used to refund the BP if the original transaction were to fail due to missing state.</p>
+<h4 id="key-points-1">Key Points</h4>
+<ul>
+<li>Main Benefit: No state access restrictions.</li>
+<li>Drawbacks:
+<ul>
+<li>The version with a pool of transaction bundles might be infeasible do to the large size of bundles (as opposed to the Eth1 pool of individual transactions) and the strict timing constraints.</li>
+<li>Without a pool, bundles cannot be combined, resulting in only one relayer contributing to any given block. Relayers would be expected to centralize, which introduces censorship concerns.</li>
+<li>Even in the pool case, it is unclear whether the combining of bundles would work well enough to fully alleviate censorship concerns.</li>
+<li>Complex incentive system.</li>
+</ul>
+</li>
+</ul>
+<h3 id="pull-model">Pull Model</h3>
+<p><img src="./pull.png" alt="BPs pulling state from an SP" /></p>
+<p>Users send transactions to the network, where nodes maintain a pool of pending transactions. Before creating a block, a BP chooses a subset of the pending transactions from the pool and sends them to a SP requesting the state for this transaction bundle. Having received that state, the BP can include the bundle into the new block.</p>
+<p>In order for intermediary nodes and the BP to verify the validity of a transaction before the full state is attached by the SP, the user would have to attach enough state to the transaction to verify the signature and fee payment ability. This transaction part would therefore have to be standardized across EEs, with the simplest option being a verification function provided by all EEs.</p>
+<p>Alternatively, a <a href="https://ethresear.ch/t/de-risking-execution-environments-by-adding-value-holding-ees/6413">Value-Holding EE (VHEE)</a> could be enshrined. Any transaction would use this VHEE for fee payments. Nodes in the network would understand the VHEE and could thus verify transaction validity.</p>
+<p>In both cases, nodes in the network would be expected to update the witnesses for this attached state as new blocks arrive.</p>
+<p>BPs have no way to predict the actual gas used by any bundle of combined transactions. In particular, any transaction in that bundle could invalidate all further transactions in the same bundle, for example by reducing the balances of their senders to 0. To mitigate that, BPs could &quot;overbundle&quot;, i.e. send more transactions to the SP than they expect to fit into a block. The SP would provide state for those transactions until the block limit is reached. In the VHEE case, transactions could additionally be required to include a list of VHEE addresses and the maximum amount they might reduce the balance of that address by. In this way, a BP could pick transactions in such a way as to prevent earlier transactions invalidating later ones.</p>
+<h4 id="state-access-restrictions-3">State Access Restrictions</h4>
+<p>No restrictions for the main transaction. The BP only reaches out to the SP when creating the block, ensuring the state returned is up to date. Even more importantly, by bundling the transactions and requesting state for the whole bundle at once, state is attached in the exact context these transactions are then included into the block. This ensures that the provided state is always sufficient. It constitutes one of the key differences to the Direct Push Model, where state is attached <em>before</em> the transactions are bundled, resulting in the restrictions of that model.</p>
+<p>As the user would have to include state for signature verification and fee payment, this transaction part would technically have the same restrictions outlined in the Direct Push Model. However, those limitations would be insignificant in practice. As signature verification and fee payment also have predictable state access under Eth1, compatibility between Eth1 and Eth2 would not be impaired. Moreover, in case of a VHEE, the VHEE would be designed in such a way as to ensure predictable state access, making further restrictions unnecessary.</p>
+<h4 id="incentives-3">Incentives</h4>
+<p>The BP pays the SP for the provided state, e.g. via a payment channel. Depending on the trust between the BP and the SP, this could be done on a (trust-minimized) per-transaction basis or a (more efficient) per-bundle basis.</p>
+<h4 id="centralization-risks-3">Centralization Risks</h4>
+<p>SPs must hold the entire state, which will require a substantial amount of storage. SPs will also be expected to execute transaction bundles quickly, so computing power is also required.</p>
+<p>BPs will likely prefer to acquire state from SPs they've built trust with, to reduce the risk of griefing, increasing centralization.</p>
+<p>However, no individual SP can censor a transaction, since the BP creates and orders the transaction bundle. An SP may withhold state for an entire bundle, but doing so would risk their reputation and the BP could easily retry with another SP.</p>
+<h4 id="timing-constraints-3">Timing Constraints</h4>
+<p>A BP would have to reach out to an SP to acquire updated state for the pending bundle within one slot's time.</p>
+<h4 id="attributability-of-missing-state-3">Attributability of Missing State</h4>
+<p>SPs are always responsible for providing the state requested. BPs only pay after verifying this state is sufficient and are not allowed to include transactions with insufficient state into a block.</p>
+<h4 id="key-points-2">Key Points</h4>
+<ul>
+<li>Benefits:
+<ul>
+<li>No relevant state access restrictions.</li>
+<li>Less problematic timing constraints.</li>
+<li>No significant centralization risks. While it can be expected that a small subset of SPs will specialize in providing state for BPs, no SP can significantly interfere with the overall process. The worst a SP can do is not provide state when asked to do so.</li>
+</ul>
+</li>
+<li>Main Drawback: Some standardization around signature verification necessary, either via verification scripts or via an enshrined VHEE.</li>
+</ul>
+<h2 id="further-discussion">Further Discussion</h2>
+<h3 id="preemptive-witnesses-gas-costs">Preemptive Witnesses &amp; Gas Costs</h3>
+<p>If the transaction initiator is able to provide enough witnesses beyond ensuring their balance, should the state access be cheaper? This should be deterministic if the witnesses are signed with the transaction, but would add complexity.</p>
+<h3 id="cost-of-state">Cost of State</h3>
+<p>How do block proposers and state providers negotiate the price for state? Is it set by the network? Should block proposers tender bids from multiple state providers for a block, and select the cheapest one?</p>
+<p>Should the price be set per state access? Per byte of witness data?</p>
+<p>If you charge per byte of witness data, how does the BP know the SP isn't including unnecessary bytes?</p>
+<p>If multiple transactions use the same witnesses, should the price be evenly divided? Full price for each transaction? Only the first transaction pays?</p>
+<h3 id="state-abstraction">State Abstraction</h3>
+<p>The exact semantics of how execution environments request state is not defined by this proposal, but would be required for the pull or relay models to work.</p>
+<h3 id="decentralized-state-network">Decentralized State Network</h3>
+<p>Instead of collecting transactions and sending the entire bundle to a state provider, would it be possible to create a distributed hash table, and have the block proposer request state on-the-fly during execution? This alternative would block execution of transactions on network requests, and likely make serial execution of transactions too slow/unpredictable. Leveraging advancements in <a href="https://arxiv.org/abs/1809.01326">software transactional memory</a> could still make this viable.</p>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>

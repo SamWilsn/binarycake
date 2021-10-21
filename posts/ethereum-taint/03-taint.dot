@@ -1,0 +1,26 @@
+digraph {
+    bgcolor="transparent";
+    color="white";
+    fontcolor="white";
+    node                [color="white", fontcolor="white"];
+    edge                [color="white", fontcolor="white"];
+
+    subgraph cluster_0 {
+        ret_0 [color=red, fontcolor=purple, style=bold];
+        addr_embed0 [color=purple, fontcolor=purple];
+        foo_1_embed1 [color=red, fontcolor=red, style=bold];
+        vloc__4_embed2 [color=red, fontcolor=red];
+        
+		label = "!!main";
+        "!!block_0" -> zero;
+        "!!block_0" -> ret_0;
+        "!!block_0" -> foo_1_embed1;
+        "!!block_0" -> foo_0_embed3;
+        "!!block_0" -> vloc__4_embed2;
+        "!!block_0" -> addr_embed0;
+        addr_embed0 -> foo_1_embed1;
+        foo_1_embed1 -> vloc__4_embed2 [color=red];
+        foo_0_embed3 -> vloc__4_embed2;
+        vloc__4_embed2 -> ret_0 [color=red];
+	}
+}

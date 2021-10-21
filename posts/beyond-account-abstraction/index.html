@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    🅰️🅰️ Account Abstraction Beyond EIP-2938 🧵🎉
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    🅰️🅰️ Account Abstraction Beyond EIP-2938 🧵🎉
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Tue Oct 13, 2020
+
+        
+        
+            
+                &#183; 2187 words
+            
+        
+        
+            
+            
+                &#183; 11 min
+            
+        
+        
+        <hr/>
+    
+    <p><em>Originally posted on <a href="https://hackmd.io/@SamWilsn/S1UQDOzBv">hackmd.io</a>.</em></p>
+<p><em>Special thanks to <a href="https://twitter.com/adietrichs">@adietrichs</a> and the rest of the Quilt team for review, content, and editing!</em></p>
+<h2 id="more-account-abstraction">More Account Abstraction?</h2>
+<p>If you haven't yet, read <a href="https://binarycake.ca/posts/account-abstraction-explained/">EIP-2938 Account Abstraction Explained</a> for some background on account abstraction (AA) and how <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2938.md">EIP-2938</a> implements it. To quickly summarize it here, EIP-2938 implements just enough AA to support single-tenant applications, with <em>minimal</em> consensus changes and some new transaction propagation rules.</p>
+<p>While the EIP lays the groundwork for AA and does provide a compelling solution for single-tenant use cases, like smart contract wallets, several use cases are not satisfied and require new features to be fully realized.</p>
+<!--
+## Use Cases
+
+Several use cases benefit substantially from AA, and are summarized below along with some example implementations and the difficulties they face in current Ethereum.
+
+### Smart Contract Wallet
+
+Smart contract wallets bring the features of smart contracts to user accounts. Historically they are limited because only externally owned accounts (EOAs) can initiate transactions. [Gnosis Safe](https://gnosis-safe.io/) is a popular example.
+
+### Mixer
+
+Mixers, like [Tornado.cash](http://tornado.cash/), increase privacy by depositing funds of several people into a single pool and obfuscating the link between the depositor and the person withdrawing. The privacy of mixers in current Ethereum is somewhat compromised because withdrawing from a mixer requires funds to pay for gas, and those funds can be linked to a particular person. AA sidesteps the problem, and instead lets the mixer contract pay for gas itself.
+
+### Arbitrage
+
+Arbitrageurs compete to make trades to take advantage of price differences. Many of the transactions to execute these trades get reverted once the price differences are reconciled, wasting gas and exacerbating market inefficiency. [Uniswap](https://uniswap.org/)'s liquidity pools present an opportunity for arbitrage.
+
+With AA, market contracts can define transaction validity rules that invalidate rejected trade transactions, instead of simply reverting them. The invalidated transactions cost no gas, and occupy no block space.
+
+-->
+<h2 id="features-beyond-eip-2938">Features Beyond EIP-2938</h2>
+<p>Building upon the foundations of EIP-2938, there are several more features that can be implemented.</p>
+<h3 id="proxy-contracts-with-delegatecall">Proxy Contracts with <code>DELEGATECALL</code></h3>
+<h4 id="what-do-we-want">What do we want?</h4>
+<p>Smart contract wallets often support upgradability by proxying calls to another contract. EIP-2938 alone does not support <code>DELEGATECALL</code> before <code>PAYGAS</code> because the target of the call may be destroyed, potentially invalidating a large number of pending transactions.</p>
+<h4 id="how-do-we-get-it">How do we get it?</h4>
+<p>Described in <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2937.md">EIP-2937</a>, the <code>SET_INDESTRUCTIBLE</code> opcode conveniently prevents a contract from calling <code>SELFDESTRUCT</code>. EIP-2937 is a fairly minimal change, and is useful with or without AA.</p>
+<p>To safely enable <code>DELEGATECALL</code> before <code>PAYGAS</code> from AA contracts, a node would check the first opcode of the library (callee) contract, and proceed if and only if it is <code>SET_INDESTRUCTIBLE</code>.</p>
+<p>This lets AA contracts call out to libraries before <code>PAYGAS</code> to determine transaction validity. These libraries could be loaded from a dynamic address, enabling upgradability of the validation logic!</p>
+<h3 id="read-only-calls-with-staticcall">Read-only Calls with <code>STATICCALL</code></h3>
+<h4 id="what-do-we-want-1">What do we want?</h4>
+<p>External read-only calls into an AA contract, like <code>eth_call</code>, are generally useful. Getting your account balance, the conversion rate between tokens, and simply reading your nonce are all incredibly common operations that use <code>STATICCALL</code>. The bytecode prefix in the EIP immediately stops all incoming calls, including static ones.</p>
+<h4 id="how-do-we-get-it-1">How do we get it?</h4>
+<p>Enabling <code>STATICCALL</code> is as simple as adding a new opcode <code>IS_STATIC</code> that returns true if the current frame of execution is read-only, and amending the AA bytecode prefix to allow external calls if <code>IS_STATIC</code> is true. Read-only calls cannot modify state, and therefore cannot invalidate other transactions.</p>
+<h3 id="read-write-calls">Read-write Calls</h3>
+<h4 id="what-do-we-want-2">What do we want?</h4>
+<p>Read-only calls are great and all, but what about writing state into AA contracts from non-AA transactions? The most basic use case here is depositing ETH/tokens into a multi-tenant AA contract<sup class="footnote-reference"><a href="#utxo">1</a></sup>, which requires updating a particular user's balance within the contract.</p>
+<div class="footnote-definition" id="utxo"><sup class="footnote-definition-label">1</sup>
+<p>Deposits are possible even without read-write calls, but it's a bit of a <a href="https://hackmd.io/@SamWilsn/B1c0ZdaGP">kludge</a>.</p>
+</div>
+<h4 id="how-do-we-get-it-2">How do we get it?</h4>
+<p>The restrictions imposed by the EIP are designed to establish a ratio between how much an attacker has to spend in gas fees versus how many pending transactions are invalidated. The major problem with allowing read-write calls is that a single mined transaction could call into many AA contracts and invalidate their pending transactions, skewing this ratio. If the same ratio were to be preserved, read-write calls would be safe.</p>
+<p>To this end, we introduce a new opcode <code>RESERVE_GAS</code>, taking one argument <code>N</code>, which guarantees a call consumes at least <code>N</code> gas. The exact specifics of how this opcode is implemented are still being specified (refund counter vs. a new counter.) Then we standardize an additional bytecode prefix for AA contracts which uses the new <code>RESERVE_GAS</code> opcode when called externally to enforce a minimum gas usage.</p>
+<p>If calling into an AA contract is at least as expensive as targeting that contract directly, non-AA transactions can't invalidate any more transactions than directly targeting those contracts would have.</p>
+<h3 id="multiple-pending-transactions">Multiple Pending Transactions</h3>
+<h4 id="what-do-we-want-3">What do we want?</h4>
+<p>Every multi-tenant<sup class="footnote-reference"><a href="#1">2</a></sup> use case (mixer, arbitrage, etc) requires that multiple transactions targeting the same AA contract propagate through the network simultaneously. Imagine having to send a transaction repeatedly to compete for the next nonce value, instead of just sending it and walking away.</p>
+<p>EIP-2938 only propagates a single transaction at a time, and while <a href="https://hackmd.io/@SamWilsn/B1c0ZdaGP">bundling transactions</a> does provide a partial workaround, the drawbacks make it impractical.</p>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">2</sup>
+<p>Meaning in use by multiple external uncoordinated actors—human or not—at the same time.</p>
+</div>
+<h4 id="how-do-we-get-it-3">How do we get it?</h4>
+<p>There are three problem areas that need to be solved before we can have multiple pending transactions per AA contract.</p>
+<h5 id="replay-protection-transaction-hash-uniqueness">Replay Protection &amp; Transaction Hash Uniqueness</h5>
+<p>Replay protection is the defense against another party taking your transaction and resending it after it has already been included in a block. Since the transaction fields don't change, without some external mechanism, the transaction remains valid. The nonce field in transactions serves that purpose today. As a secondary effect, the strictly-increasing nonce also guarantees that each transaction has a unique hash. As the signature covers all of the fields, including the nonce, another party cannot change the nonce without invalidating the transaction.</p>
+<p>AA contracts, however, are free to choose what fields their signature scheme covers. They can, therefore, ignore the protocol nonce and define their own (or no) replay protection mechanism.</p>
+<p>EIP-2938 handles nonces the same way as traditional transactions. Unfortunately using the nonce supplied when the transaction was created falls apart when there are pending transactions from multiple uncoordinated users. Once one of these transactions is mined, the contract's nonce increments and the rest of the pending transactions are dropped, even if the contract might still consider them valid.</p>
+<p>To enable multi-tenant applications, whenever an AA contract's nonce changes, nodes &quot;fix&quot; the nonce of any pending transactions and revalidate them. For contracts with their own replay protection mechanism, this relegates the protocol nonce to the role of preserving hash uniqueness for transactions included in a block, effectively creating two distinct hashes<sup class="footnote-reference"><a href="#2">3</a></sup> for each transaction:</p>
+<ul>
+<li>The <em>inclusion hash</em>, which is a new name for the traditional hash including the nonce. It uniquely refers to a particular transaction once mined, in a particular block, at a particular index within that block; and</li>
+<li>The <em>nonceless hash</em>, which is a hash that refers to one or possibly more transactions, which may be propagating or included in a block.</li>
+</ul>
+<p>Clients would likely have to provide an API endpoint for converting between the two hashes.</p>
+<p>With malleable nonces comes additional validation effort every time a new block arrives. Pending transactions are revalidated after new blocks are validated, but this work isn't <em>part</em> of block validation. Ideally all pending transactions can be revalidated before the next block arrives, and nodes can guarantee this by limiting how much cumulative validation gas each AA contract can consume. Quilt has <a href="https://ethresear.ch/t/dos-vectors-in-account-abstraction-aa-or-validation-generalization-a-case-study-in-geth/7937">measured</a> how different validation gas limits affect revalidation time, showing that even with generous gas limits, nodes should easily be able to complete revalidation in time.</p>
+<div class="footnote-definition" id="2"><sup class="footnote-definition-label">3</sup>
+<p>Accepting proposals for better names!</p>
+</div>
+<h5 id="amplification-attacks">Amplification Attacks</h5>
+<p>If an attacker spams non-AA transactions to the network, causing nodes to waste resources validating them, eventually a large portion of those transactions will make it into mined blocks, costing the attacker real money. Transactions with a low gas price get evicted from the pending pool, creating a price floor for this kind of attack.</p>
+<p>For AA, a single mined transaction could invalidate many pending transactions, none of which make it into mined blocks, and therefore cost an attacker nothing. This is why the propagation rules in EIP-2938 are so restrictive.</p>
+<p>The same simple solution above (a cumulative validation gas limit) mitigates amplification attacks as well. An attacker can still spam the network, but there is a clear bound on the ratio of validation work vs. paid transactions included in blocks. Quilt has done <a href="https://ethresear.ch/t/dos-vectors-in-account-abstraction-aa-or-validation-generalization-a-case-study-in-geth/7937">extensive work</a> indicating that, with reasonable bounds, nodes will remain able to cope with worst case validation load.</p>
+<h5 id="crowding-out-transactions">Crowding Out Transactions</h5>
+<p>Whether it's because of hardware constraints, or the cumulative gas limit mentioned above, nodes are only able to keep and propagate a limited number of transactions per AA contract. If nodes order pending AA transactions naively by gas price, a malicious user could crowd out other users by sending many high paying, mutually exclusive transactions targeting the AA contract. Only one of the attacker's transactions would make it on chain, reducing the contract's throughput at a low cost to the attacker.</p>
+<p>Including an <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2930.md">EIP-2930</a>-style state access list and making it binding (state accesses outside the list fail) gives nodes enough information to effectively propagate multiple transactions. Transactions with disjoint access lists cannot invalidate each other, and are always safe to propagate. If two transactions' access lists intersect, nodes choose the one with a higher gas fee.</p>
+<p>This approach is only sketched out in the EIP, and needs further research.</p>
+<h3 id="pure-validation-logic">Pure Validation Logic</h3>
+<h4 id="what-do-we-want-4">What do we want?</h4>
+<p>Multiple pending transactions introduce the need to occasionally revalidate transactions. Some validation schemes (like zero-knowledge proofs) have a large one-time cost (to validate the proof) which cannot be invalidated by state or environment changes. If nodes are able to run these validation steps and cache the result, they can avoid the recurring cost during revalidation and safely enable higher validation gas limits.</p>
+<h4 id="how-do-we-get-it-4">How do we get it?</h4>
+<p>Building upon the <code>IS_STATIC</code> opcode and <code>STATICCALL</code>s into AA contracts from above, pure validation logic can be separated from regular validation and cached by standardizing a particular bytecode prefix, roughly implementing:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>if (msg.sender == 0xffffffffffffffffffffffffffffffffffffffff) {
+</span><span>    let result = STATICCALL(this); // Or alternatively PURECALL
+</span><span>    return CALL(this, result);
+</span><span>} else if (msg.sender == address(this)) {
+</span><span>    if (IS_STATIC()) {             // Or alternatively IS_PURE
+</span><span>        let result = /* do one time validation */
+</span><span>        return result;
+</span><span>    }
+</span><span>} else {
+</span><span>    LOG1(msg.sender, msg.value);
+</span><span>    return;
+</span><span>}
+</span></code></pre>
+<p>If the AA contract reads from state or the environment during the initial <code>STATICCALL</code>, the node would disable caching and revert to the lower validation gas limit. Instead of handling these state reads as a special case, this behavior could be standardized with newly introduced opcodes <code>PURECALL</code> and <code>IS_PURE</code>.</p>
+<p>In slightly more human-friendly terms, the contract first <code>STATICCALL</code>s itself to perform the pure validation step. Then the contract calls itself, supplying the result of the static call (which can be cached by the node), to do the state-dependent portion of the validation, invoke <code>PAYGAS</code>, and perform the rest of execution. Passing the cached value back to the contract during later revalidations could reuse the existing implementation of contract calls.</p>
+<h3 id="sponsored-transactions">Sponsored Transactions</h3>
+<h4 id="what-do-we-want-5">What do we want?</h4>
+<p>Sponsored transactions, in the context of AA, are essentially setting <code>msg.sender</code> to a value other than the AA contract itself. Relayers could use sponsored transactions to act on behalf of the relayed account.</p>
+<h4 id="how-do-we-get-it-5">How do we get it?</h4>
+<p><a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2711.md">EIP-2711</a>'s specification of sponsored transactions is, unfortunately, incompatible with AA because it enshrines the signature format for sponsored transactions. As an alternative, we propose a new precompile that recovers a signature over the call data, and sets <code>msg.sender</code> appropriately.</p>
+<h2 id="the-end">The End?</h2>
+<p>With only a handful of consensus changes and transaction pool rules, account abstraction goes from barely enough to support smart contract wallets to supporting exciting multi-tenant applications like mixers and exchanges.</p>
+<p>Is account abstraction still not handling your use case? Doubt this is feasible? Come discuss with us in the <a href="https://discord.gg/GU55yAW">#account-abstraction</a> channel over at the Eth R&amp;D Discord!</p>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>

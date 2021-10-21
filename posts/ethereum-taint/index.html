@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    Automated Detection of Dynamic State Access in Solidity
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    Automated Detection of Dynamic State Access in Solidity
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Fri Feb 21, 2020
+
+        
+        
+            
+                &#183; 1681 words
+            
+        
+        
+            
+            
+                &#183; 9 min
+            
+        
+        
+        <hr/>
+    
+    <p><em>Originally posted on <a href="https://ethresear.ch/t/automated-detection-of-dynamic-state-access-in-solidity/7003">ethresear.ch</a>.</em></p>
+<h2 id="introduction">Introduction</h2>
+<p>Deciding to support only static state access (SSA) or to support full dynamic state access (DSA) is one of the remaining open questions on the Eth2 roadmap. If a purely SSA system proves feasible, there are a number of benefits that simplify:</p>
+<ul>
+<li>State providers;</li>
+<li>Synchronous communication between execution environments;</li>
+<li>Account abstraction; and</li>
+<li>Transaction pools, witness aggregation and refreshes.</li>
+</ul>
+<p>Continuing the exploration of state provider models described <a href="https://ethresear.ch/t/state-provider-models-in-ethereum-2-0/6750">earlier</a>, we have roughly prototyped a modification to the solidity compiler that can detect instances of DSA in smart contracts using taint analysis.</p>
+<p>This proof of concept shows that it is possible to build tooling to support a purely SSA Ethereum.</p>
+<h2 id="background">Background</h2>
+<h3 id="state-access-witnesses">State Access &amp; Witnesses</h3>
+<p>For the direct push state provider model to work, the actor creating the transaction should be able to build a witness (such as a Merkle proof) to every storage location the transaction will read or write. If the transaction <em>does</em> read from or write to a location not included in the witness, the transaction is reverted, and its fees are forfeit.</p>
+<p>DSA is a particularly problematic issue that can lead to an insufficient witness. In concrete terms, DSA occurs when the <code>offset</code> argument to <code>sload</code> or <code>sstore</code> is influenced by a previous <code>sload</code> result.</p>
+<p>A short classification of some types of DSA, with solidity examples, can be found <a href="https://gist.github.com/SamWilsn/369de587ac7373c8f77ed26079531671">here</a>.</p>
+<h3 id="yul-language">Yul Language</h3>
+<p>Example code in this article is written in pseudocode loosely resembling EVM-flavored <a href="https://solidity.readthedocs.io/en/v0.6.3/yul.html">Yul</a>, an internal representation language used in the solidity compiler. The prototype is written as an optimization pass that operates on Yul.</p>
+<h3 id="taint-analysis">Taint Analysis</h3>
+<p>Taint analysis (or <a href="https://en.wikipedia.org/wiki/Taint_checking">taint checking</a>) is a type of data flow analysis where &quot;taint&quot; flows from an upstream source into all downstream variables. It is commonly used in web applications, where user supplied values (like headers) are the source of taint, and variables used in database queries are verified to be taint-free.</p>
+<p>In a compiled language, it is conceptually similar to symbolic execution, though much less complex.</p>
+<p>Consider the following example, where <code>value</code> is tainted by an <code>sload</code>:</p>
+<pre data-lang="yul" style="background-color:#2b303b;color:#c0c5ce;" class="language-yul "><code class="language-yul" data-lang="yul"><span>function tweedle() -&gt; twixt
+</span><span>{
+</span><span>    let zero := 0
+</span><span>    let value := sload(zero)
+</span><span>    let dee := 45
+</span><span>    let dum := add(dee, value)
+</span><span>    let rattle := 88
+</span><span>
+</span><span>    let selector := gt(dum, 100)
+</span><span>
+</span><span>    switch selector
+</span><span>    case 0 {
+</span><span>        twixt := dee
+</span><span>    }
+</span><span>    default {
+</span><span>        twixt := rattle
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>The graph below shows the flow of taint from <code>value</code> all the way to <code>twixt</code>. Red nodes and edges indicate taint, and dotted lines represent indirect influence (in this case, through the <code>switch</code>.)</p>
+<p><img src="./00-tweedle.png" alt="tweedle" /></p>
+<h2 id="prototype">Prototype</h2>
+<h3 id="implementation">Implementation</h3>
+<p>Implementation source code is available for <a href="https://github.com/SamWilsn/solidity/blob/state-taint-0.5.16/libyul/optimiser/OrderDependentStateDestroyer.cpp">solidity 0.5</a> and for <a href="https://github.com/SamWilsn/solidity/blob/state-taint/libyul/optimiser/OrderDependentStateDestroyer.cpp">solidity 0.6</a>, though not all features are implemented on both branches. Test cases can be found <a href="https://github.com/SamWilsn/taint-tests">here</a>, though not all successfully pass. This prototype is built as a Yul optimization pass, and so requires <code>--optimize-yul --ir</code> as additional compiler flags.</p>
+<p>Since this is a proof of concept, the output is messy and barely readable, the implementation is inefficient, and is 100% capable of summoning <a href="https://en.wikipedia.org/wiki/Undefined_behavior">nasal demons</a>. Obviously, don't use this software in any kind of production environment.</p>
+<p>The analysis can be split into three conceptual phases: data gathering, function resolution, and taint checking.</p>
+<h4 id="data-gathering">Data Gathering</h4>
+<p>In the data gathering phase, the analyzer visits each node in the Yul abstract syntax tree (AST). This phase accomplishes several goals:</p>
+<ul>
+<li>Creates a scope for each function;</li>
+<li>Tracks variable assignments, declarations, and function calls;</li>
+<li>Tracks return variables and arguments of <code>sload</code> and <code>sstore</code>;</li>
+<li>Resolves the effects of built-in functions (ex. <code>add</code>, <code>iszero</code>);</li>
+<li>Propagates constant values; and</li>
+<li>Converts memory accesses into special variables.</li>
+</ul>
+<p>The following is a simplified example of the information collected for the given input:</p>
+<pre data-lang="yul" style="background-color:#2b303b;color:#c0c5ce;" class="language-yul "><code class="language-yul" data-lang="yul"><span>{
+</span><span>    let zero := 0
+</span><span>    let ret_0 := fun_narf_19()
+</span><span>    sstore(ret_0, zero)
+</span><span>
+</span><span>    function fun_narf_19() -&gt; vloc__4
+</span><span>    {
+</span><span>        let addr := 97
+</span><span>        let foo_0 := 54
+</span><span>        let foo_1 := sload(addr)
+</span><span>
+</span><span>        vloc__4 := add(foo_0, foo_1)
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>The collected output:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>Known Variables:
+</span><span>    addr         [constant=97] [Untaintable]
+</span><span>    ret_0                      [Untaintable]
+</span><span>    zero         [constant=0]
+</span><span>    vloc__4
+</span><span>    foo_0        [constant=54]
+</span><span>    foo_1                      [Tainted]
+</span><span>    !!block_0    [constant]
+</span><span>
+</span><span>Functions:
+</span><span>	!!main() -&gt;
+</span><span>		Data Flow:
+</span><span>			!!block_0            -&gt; zero, ret_0,
+</span><span>		Unresolved Function Calls:
+</span><span>			- fun_narf_19
+</span><span>
+</span><span>	fun_narf_19() -&gt; vloc__4,
+</span><span>		Data Flow:
+</span><span>			addr                 -&gt; foo_1,
+</span><span>			foo_1                -&gt; vloc__4,
+</span><span>			foo_0                -&gt; vloc__4,
+</span><span>			!!block_0            -&gt; addr, foo_1, foo_0, vloc__4,
+</span></code></pre>
+<p><img src="./01-split.png" alt="split" /></p>
+<p>The variable <code>!!block_0</code> is synthesized to represent indirect influence, such as <code>if</code> statements and loops. This example does not contain any indirect influence, though the block variables are still created. The <code>!!main</code> function represents statements not contained in any other function, like the <code>sstore</code> in the example code.</p>
+<p>Data flow, in the example output, shows how data flows from upstream variables (to the left of <code>-&gt;</code>) to downstream variables (on the right.)</p>
+<p>Note that <code>fun_narf_19</code> is listed as an unresolved function call.</p>
+<h5 id="a-note-on-memory">A Note on Memory</h5>
+<p>Memory accesses are tracked by synthesizing variables (ex. <code>!!m0</code>) for every <code>mstore</code>, similar to how compilers convert to <a href="https://en.wikipedia.org/wiki/Static_single_assignment_form">single static assignment</a> form. This process relies on very basic <a href="https://en.wikipedia.org/wiki/Constant_folding#Constant_folding">constant folding</a>. Should an <code>mstore</code> or an <code>mload</code> access an offset which is not computable at compile time or has not been written to yet, a catch-all variable <code>!!memory</code> is used instead.</p>
+<h4 id="function-resolution">Function Resolution</h4>
+<p>The function resolution phase iteratively embeds callee function scopes into the caller's scope, uniquely renaming variables in the data flow graph. Embedding functions in this way allows accurate tracing between arguments and return variables.</p>
+<p>Continuing with the above example, the data flow graph after this phase looks like:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>Functions:
+</span><span>	!!main() -&gt;
+</span><span>		Data Flow:
+</span><span>			!!block_0            -&gt; zero, ret_0, addr_embed0, foo_1_embed1, foo_0_embed3, vloc__4_embed2
+</span><span>			addr_embed0          -&gt; foo_1_embed1,
+</span><span>			foo_1_embed1         -&gt; vloc__4_embed2,
+</span><span>			foo_0_embed3         -&gt; vloc__4_embed2,
+</span><span>			vloc__4_embed2       -&gt; ret_0
+</span></code></pre>
+<p><img src="./02-resolved.png" alt="resolved" /></p>
+<h4 id="taint-checking">Taint Checking</h4>
+<p>Last, and probably simplest, is taint checking. This phase walks through the data flow graph, tainting every variable that is reachable from an initially tainted variable.</p>
+<p>Once the taint is propagated, the &quot;protected&quot; variables (variables used as the key argument to an <code>sload</code> or <code>sstore</code>) are checked for taint. If tainted protected variables are found, a taint violation exception is thrown.</p>
+<p>In this example, <code>ret_0</code> is both protected and tainted.</p>
+<p><img src="./03-taint.png" alt="tainted" /></p>
+<h3 id="limitations-future-work">Limitations &amp; Future Work</h3>
+<h4 id="call-graph-cycles">Call Graph Cycles</h4>
+<p>A call graph cycle happens when a function <code>foo</code> calls a function <code>bar</code> and <code>bar</code> also calls <code>foo</code>. For example:</p>
+<pre data-lang="yul" style="background-color:#2b303b;color:#c0c5ce;" class="language-yul "><code class="language-yul" data-lang="yul"><span>function foo(arg0) -&gt; ret0 {
+</span><span>    switch arg0
+</span><span>    case 0 {
+</span><span>        ret0 := bar()
+</span><span>    }
+</span><span>    default {
+</span><span>        ret0 := 1
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span>function bar() -&gt; ret1 {
+</span><span>    ret1 := foo(1)
+</span><span>}
+</span></code></pre>
+<p>Cycles in the call graph currently cause the prototype to loop infinitely. It should be possible to break these cycles by assuming all parameters of one function influence all of that function's return variables.</p>
+<h4 id="constant-propagation">Constant Propagation</h4>
+<p><a href="https://en.wikipedia.org/wiki/Constant_folding#Constant_folding">Constant propagation</a> is the process of substituting the values of known constants in expressions at compile time.</p>
+<p>This prototype implements a very limited form of constant propagation to support the <code>mstore</code> and <code>mload</code> instructions. If the offset argument to <code>mstore</code> or <code>mload</code> can be computed at compile time, the taint analysis through memory is more accurate (fewer misleading taint violations.)</p>
+<h4 id="calling-contracts">Calling Contracts</h4>
+<p>The builtin functions to call other contracts are disabled in the prototype. Enabling them requires further thought on the ABI between contracts.</p>
+<p>Currently the prototype assumes that call data opcodes (<code>CALLDATALOAD</code>, <code>CALLDATASIZE</code>, <code>CALLDATACOPY</code>, etc) return untainted data. If a contract calls another contract, that assumption is invalidated.</p>
+<h4 id="control-flow">Control Flow</h4>
+<p>The approach taken in this prototype to handle control flow and branching (synthesizing <code>!!block</code> variables) is insufficient to accurately trace taint through loops.</p>
+<p>Consider the following:</p>
+<pre data-lang="yul" style="background-color:#2b303b;color:#c0c5ce;" class="language-yul "><code class="language-yul" data-lang="yul"><span>function fizzbuzz() {
+</span><span>    for { } 1 { }
+</span><span>    {
+</span><span>        let zero := 0
+</span><span>        let foo := sload(zero)
+</span><span>        let cond := eq(foo, zero)
+</span><span>        if cond {
+</span><span>            break
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Which roughly translates to the following data flow graph:</p>
+<p><img src="./04-flow.png" alt="control flow" /></p>
+<p><code>zero</code> is not influenced by <code>!!block_0</code> between where it is assigned and where it is used for <code>sload</code>. In other words, <code>zero</code> is not dependent on <code>storage[0]</code> at the time <code>sload</code> is called, even though the data flow graph thinks it is.</p>
+<h4 id="bit-accurate-taint">Bit-Accurate Taint</h4>
+<p>Variables in the prototype are tracked as an indivisible unit, which may be tainted or clean. Tracking each bit of a variable separately enables more accurate analysis.</p>
+<p>This improvement is particularly relevant when using boolean operations (like <code>or</code> &amp; <code>and</code>) and the <code>mload</code> instruction with non-256 bit types.</p>
+<p>For example, the following snippet does not exhibit any DSA, though the prototype will report a taint violation:</p>
+<pre data-lang="yul" style="background-color:#2b303b;color:#c0c5ce;" class="language-yul "><code class="language-yul" data-lang="yul"><span>function fizzbuzz(value)
+</span><span>{
+</span><span>    // Place a constant byte into memory.
+</span><span>    mstore(0, 0xAB)
+</span><span>
+</span><span>    // Read a value from storage, place it into memory. This
+</span><span>    // taints memory offsets 1 through 32 inclusive.
+</span><span>    let from_storage := sload(0)
+</span><span>    mstore(1, from_storage)
+</span><span>
+</span><span>    // Get the constant back from memory.
+</span><span>    let mem_tainted := mload(0)
+</span><span>    let mem_cleaned := and(mem_tainted, 0xFF)
+</span><span>
+</span><span>    sstore(mem_cleaned, 0xC0FFEE)
+</span><span>}
+</span></code></pre>
+<p>After execution, the first 33 bytes of memory look like:</p>
+<p><img src="./05-bytes.png" alt="bytes" /></p>
+<p>Since <code>mload(0)</code> populates <code>mem_tainted</code> with the first 32 bytes of memory, <code>mem_tainted</code> contains 31 tainted bytes (all bytes after <code>memory[0]</code>). <code>mem_cleaned</code>, on the other hand, contains no tainted bytes, since only the first byte can influence its value; the other bits are masked out by <code>and</code>.</p>
+<h4 id="unimplemented-features-in-yul">Unimplemented Features in Yul</h4>
+<p>The solidity compiler's Yul implementation doesn't yet support libraries. This makes analyzing existing contracts tedious at best.</p>
+<h2 id="conclusions">Conclusions</h2>
+<p>Although the limitations mentioned above present challenges for analyzing existing contracts for DSA, we believe that existing compilers <strong>can</strong> be extended, with reasonable effort, to detect and prevent DSA while maintaining features. Furthermore, given the ease of inadvertently introducing DSA, we believe that adding this feature to smart contract compilers is <strong>necessary</strong> to write secure code.</p>
+<p><a href="https://github.com/PhABC/uniswap-solidity/blob/2434367a66b6091db7b808ed91e7ade61fad6f7d/contracts/tokens/ERC20.sol">One contract</a>, part of <a href="https://ethresear.ch/u/phabc/summary">@PhABC</a>'s uniswap-solidity, did successfully compile with minimal modification.</p>
+<p>A big thanks to Quilt for supporting this research and providing invaluable review and feedback.</p>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>

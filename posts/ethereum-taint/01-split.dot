@@ -1,0 +1,32 @@
+digraph {
+    bgcolor="transparent";
+    color="white";
+    fontcolor="white";
+    node                [color="white", fontcolor="white"];
+    edge                [color="white", fontcolor="white"];
+
+    subgraph cluster_0 {
+        ret_0 [color=purple, fontcolor=purple];
+		label = "!!main";
+        "!!block_0" -> zero;
+        "!!block_0" -> ret_0;
+	}
+    
+    subgraph cluster_1 {
+        addr [color=purple, fontcolor=purple];
+        foo_1 [color=red, fontcolor=red, style=bold];
+        
+        "!!block_0_2" [label="!!block_0"];
+        
+		label = "fun_narf_19";
+        
+        addr -> foo_1;
+        foo_1 -> vloc__4;
+        foo_0 -> vloc__4;
+        
+        "!!block_0_2" -> foo_1;
+        "!!block_0_2" -> foo_0;
+        "!!block_0_2" -> vloc__4;
+        "!!block_0_2" -> addr;
+	}
+}

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://binarycake.ca/sitemap.xml

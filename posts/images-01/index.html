@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    DIY Image Search: Part 1 - Introduction
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    DIY Image Search: Part 1 - Introduction
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Sun Jun 24, 2012
+
+        
+        
+            
+                &#183; 918 words
+            
+        
+        
+            
+            
+                &#183; 5 min
+            
+        
+        
+        <hr/>
+    
+    <p>I'm sure everyone has had an awesome picture lying around on their hard drive for what seems like forever, with a gibberish file name and no clues as to the source.  Most people would simply navigate to a site like <a href="https://www.tineye.com/">TinEye</a> and use their awesome service to identify the image and find a source.  Not you, you're interested in building some kind of software hacked together with ducktape and string, or else why would you be reading this?</p>
+<p>I'm going to be flying by the seat of my pants for this series, and I'm giving very little forethought to future posts.  Things probably will be changing dramatically as I progress through this project, so I'm going to apologise in advance if everything isn't as contiguous as it should be.</p>
+<h2 id="the-tools">The Tools</h2>
+<p>To build this monstrosity, I'm going to use a couple of interesting projects: <a href="http://phash.org/">pHash</a> and <a href="https://github.com/polachok/py-phash">py-pHash</a>, <a href="https://www.djangoproject.com/">django</a> and <a href="http://www.niwi.be/post/project-django-orm/">django-orm</a>, and <a href="http://www.postgresql.org/">PostgreSQL</a> with the <a href="http://sigaev.ru/git/gitweb.cgi?p=smlar.git;a=summary">smlar</a> extension.  I won't be going over django or PostgreSQL, so if they are foreign to you, take some time to learn about them.</p>
+<h3 id="what-is-phash">What is pHash?</h3>
+<p>To understand pHash, you'll need a basic understanding of hashes.  If you have no idea what they are, go and check out the <a href="https://en.wikipedia.org/wiki/Hash_function">hash function</a> page on wikipedia.  The Coles Notes version is that a hash function transforms an arbitrarily-sized input into a smaller fixed-size output.</p>
+<p>There is a staggering variety of hashes, and an even more astounding number of applications for them.  The type of hash we're using, a perceptual hash, maps visually (or acoustically) similar input to similar output hashes.  Take a look at the following example:</p>
+<p><img src="./comparison.png" alt="Demonstration of Perceptual Hashes" />
+<em>Tree Picture by <a href="https://commons.wikimedia.org/wiki/User:Calibas">Calibas</a> / Cervus Elaphus Picture by <a href="http://www.lucnix.be/">Luc Viatour</a></em></p>
+<p>On the left we have our images, and on the right, the pHash for the image.  Each red digit indicates a nibble that differs from the pHash of the original colour picture.  Notice how the colour and greyscale images have very similar hashes, while the third picture has a dramatically different hash.</p>
+<p>By now, you can probably see how a perceptual hash would be useful: to find images similar to A, we compute the hash for A and search for all images within a threshold distance.</p>
+<p>py-pHash is a Python wrapper for the pHash library, which will make integrating it with django much easier later on.</p>
+<h3 id="what-is-django-orm">What is django-orm?</h3>
+<p>Django-orm is a collection of 3rd-party extensions to django's already pretty awesome database system.  It adds support for a metric tonne of new database features, like negated F expressions and full text search, but the most interesting feature it adds to django is the PostgreSQL specific ArrayField.</p>
+<p>The smlar extension uses arrays extensively, so having support for them in django is essential.</p>
+<h3 id="what-is-smlar">What is smlar?</h3>
+<p>Smlar is an extension for PostgreSQL built by Oleg Bartunov and Teodor Sigaev.  It allows you to make effective similarity searches in PostgreSQL databases on pretty much any kind of data, as long as you can put it in an array.  Alexey Vasiliev goes into a lot more depth on similarity searches on his <a href="http://railsware.com/blog/2012/05/10/effective-similarity-search-in-postgresql/">blog</a>, including some example code, but basically the relevant information is that smlar adds efficient similarity searches and indexes.</p>
+<p>We'll be using smlar to find similar hashes, which will let us find similar images very quickly.</p>
+<h2 id="the-setup">The Setup</h2>
+<p>I'm running Ubuntu 12.04, so my instructions are going to be very biased towards (read: only for) Linux.  Convert the instructions to use the package management system of your choice! I'm using the standard Python that ships with Ubuntu, which at the time of writing is 2.7.3.</p>
+<h3 id="postgresql-smlar">PostgreSQL &amp; smlar</h3>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#65737e;"># Leave a comment if I missed something,
+</span><span style="color:#65737e;"># which is more than probable...
+</span><span>
+</span><span style="color:#bf616a;">sudo</span><span> apt-get install postgresql-9.1 \
+</span><span>                     postgresql-server-dev-9.1 \
+</span><span>                     git build-essential
+</span><span>
+</span><span style="color:#65737e;"># Clone smlar and build/install it
+</span><span style="color:#bf616a;">git</span><span> clone git://sigaev.ru/smlar
+</span><span style="color:#96b5b4;">cd</span><span> smlar
+</span><span style="color:#bf616a;">make </span><span>&amp;&amp; </span><span style="color:#bf616a;">sudo</span><span> make install
+</span><span>
+</span><span style="color:#65737e;"># Enable the extension
+</span><span style="color:#bf616a;">sudo -u</span><span> postgres psql</span><span style="color:#bf616a;"> -c </span><span>&#39;</span><span style="color:#a3be8c;">CREATE EXTENSION smlar</span><span>&#39;
+</span><span>
+</span><span style="color:#65737e;"># Setup django user and database
+</span><span style="color:#bf616a;">sudo -u</span><span> postgres psql</span><span style="color:#bf616a;"> -c </span><span>&#39;</span><span style="color:#a3be8c;">CREATE DATABASE lostpic</span><span>&#39;
+</span><span style="color:#bf616a;">sudo -u</span><span> postgres psql</span><span style="color:#bf616a;"> -c </span><span>&quot;</span><span style="color:#a3be8c;">CREATE USER lostpic WITH PASSWORD &#39;password1&#39;</span><span>&quot;
+</span><span style="color:#bf616a;">sudo -u</span><span> postgres psql</span><span style="color:#bf616a;"> -c </span><span>&#39;</span><span style="color:#a3be8c;">GRANT ALL PRIVILEGES ON DATABASE lostpic TO lostpic</span><span>&#39;
+</span></code></pre>
+<h3 id="phash">pHash</h3>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>sudo apt-get install libphash0 libphash0-dev
+</span></code></pre>
+<h3 id="virtualenv">Virtualenv</h3>
+<p>I'll be using virtualenv to manage a separate Python environment to make deployment easier.  This step is optional, but recommended.</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#65737e;"># Install virtualenv
+</span><span style="color:#bf616a;">sudo</span><span> apt-get install python-virtualenv
+</span><span>
+</span><span style="color:#96b5b4;">cd</span><span> /path/to/project
+</span><span>
+</span><span style="color:#65737e;"># Make the virtual environment
+</span><span style="color:#bf616a;">virtualenv</span><span> pyenv
+</span><span>
+</span><span style="color:#65737e;"># Activate it (its &#39;deactivate&#39; to exit)
+</span><span style="color:#96b5b4;">.</span><span> ./pyenv/bin/activate
+</span></code></pre>
+<h3 id="django-dependencies">Django &amp; Dependencies</h3>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#bf616a;">pip</span><span> install psycopg2 django django-orm
+</span><span style="color:#bf616a;">pip</span><span> install git+https://github.com/polachok/py-phash.git
+</span><span>
+</span><span style="color:#bf616a;">django-admin.py</span><span> startproject lostpic
+</span><span>
+</span><span style="color:#96b5b4;">cd</span><span> lostpic/lostpic
+</span></code></pre>
+<p>Edit <code>settings.py</code> with your favourite editor and make the following changes:</p>
+<ul>
+<li>Set the database backend to <code>postgresql_psycopg2</code></li>
+<li>The database user is <code>lostpic</code>, the password is <code>password1</code></li>
+<li>Uncomment the admin application in <code>INSTALLED_APPS</code></li>
+</ul>
+<p>Don't forget to edit <code>urls.py</code> to enable the admin.</p>
+<h2 id="next-up">Next Up</h2>
+<p>In the next instalment, we'll be building the models to store picture information and writing the functions to look up pictures by similarity.</p>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>

